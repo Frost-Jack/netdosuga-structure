@@ -1,0 +1,201 @@
+name: netdosuga-demo
+x-app-env: &app-env
+  APP_ENV: local
+  MOCK_MODE: 'true'
+  OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+x-health: &app-health
+  interval: 5s
+  timeout: 3s
+  retries: 30
+  start_period: 10s
+services:
+  postgres:
+    image: postgres:16.10-alpine3.22
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_DB: demo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.ps1}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, 'pg_isready -U demo -d demo']
+  kafka-volume-init:
+    image: apache/kafka:3.9.1
+    user: '0:0'
+    entrypoint: [/bin/sh, -c]
+    # A new named volume is root-owned; repair only Kafka's persistent data.
+    command: ['chown -R 1000:1000 /tmp/kraft-combined-logs']
+    volumes: [kafka-data:/tmp/kraft-combined-logs]
+    network_mode: none
+  kafka:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka-volume-init: {condition: service_completed_successfully}
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes: [kafka-data:/tmp/kraft-combined-logs]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, '/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1']
+  kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka: {condition: service_healthy}
+    entrypoint: [/opt/kafka/bin/kafka-topics.sh]
+    command: [--bootstrap-server, kafka:9092, --create, --if-not-exists, --topic, netdosuga.demo.orders.v1, --partitions, "1", --replication-factor, "1"]
+  business-kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka: {condition: service_healthy}
+    entrypoint: [/opt/kafka/bin/kafka-topics.sh]
+    command: [--bootstrap-server, kafka:9092, --create, --if-not-exists, --topic, netdosuga.business.events.v1, --partitions, "1", --replication-factor, "1"]
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    stop_grace_period: 30s
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports: ['127.0.0.1:16686:16686']
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:14269/']
+  integration-mock:
+    image: netdosuga/integration-mock:sprint1
+    pull_policy: build
+    build: ../integration-mock
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: integration-mock
+      MOCK_DELAY: 250ms
+      MOCK_TIMEOUT: 1500ms
+    depends_on:
+      jaeger: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:8083/readyz']
+  order-service:
+    image: netdosuga/order-service:sprint1
+    pull_policy: build
+    build: ../order-service
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: order-service
+      DATABASE_URL: postgres://demo:${POSTGRES_PASSWORD:?Run scripts/setup.ps1}@postgres:5432/demo?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: netdosuga.demo.orders.v1
+      BUSINESS_KAFKA_TOPIC: netdosuga.business.events.v1
+      MOCK_BASE_URL: http://integration-mock:8083
+      MOCK_HTTP_TIMEOUT: 1s
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka-init: {condition: service_completed_successfully}
+      business-kafka-init: {condition: service_completed_successfully}
+      integration-mock: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:8081/readyz']
+  notification-service:
+    image: netdosuga/notification-service:sprint1
+    pull_policy: build
+    build: ../notification-service
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: notification-service
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: netdosuga.demo.orders.v1
+      BUSINESS_KAFKA_TOPIC: netdosuga.business.events.v1
+      DATABASE_URL: postgres://demo:${POSTGRES_PASSWORD:?Run scripts/setup.ps1}@postgres:5432/demo?sslmode=disable
+      KAFKA_GROUP_ID: netdosuga-demo-notification-v1
+      MOCK_BASE_URL: http://integration-mock:8083
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka-init: {condition: service_completed_successfully}
+      business-kafka-init: {condition: service_completed_successfully}
+      integration-mock: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:8082/readyz']
+  gateway:
+    image: netdosuga/gateway:sprint1
+    pull_policy: build
+    build: ../gateway
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: gateway
+      ORDER_GRPC_ADDR: order-service:50051
+      ORDER_GRPC_TIMEOUT: 3s
+    ports: ['127.0.0.1:8080:8080']
+    depends_on:
+      order-service: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:8080/readyz']
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=1d']
+    ports: ['127.0.0.1:9090:9090']
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:9090/-/ready']
+  grafana:
+    image: grafana/grafana:12.2.1
+    environment:
+      GF_SECURITY_ADMIN_USER: demo
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run scripts/setup.ps1}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    ports: ['127.0.0.1:3000:3000']
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:3000/api/health']
+  smoke:
+    image: python:3.13.9-alpine3.22
+    profiles: [tools]
+    working_dir: /tests
+    command: [python, smoke.py]
+    environment:
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run scripts/setup.ps1}
+    volumes:
+      - ./tests:/tests:ro
+      - ./test-results:/results
+      - ../gateway/api:/contracts/gateway:ro
+      - ../order-service/api:/contracts/order-service:ro
+      - ../integration-mock/openapi.json:/contracts/mock-openapi.json:ro
+      - ../notification-service/event.schema.json:/contracts/notification-event.schema.json:ro
+volumes:
+  postgres-data:
+  kafka-data:
+  prometheus-data:
+  grafana-data:
+

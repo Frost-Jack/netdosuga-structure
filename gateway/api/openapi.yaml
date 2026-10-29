@@ -1,0 +1,4783 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Netdosuga local demo gateway",
+    "version": "2.0.0",
+    "description": "Synthetic infrastructure demo. Requires APP_ENV=local and MOCK_MODE=true."
+  },
+  "paths": {
+    "/api/v1/demo/orders": {
+      "post": {
+        "operationId": "createDemoOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scenario"
+                ],
+                "properties": {
+                  "scenario": {
+                    "type": "string",
+                    "enum": [
+                      "success",
+                      "error",
+                      "delay",
+                      "timeout"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Synthetic order accepted; receipt inserted and event acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON or scenario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Process alive"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Order gRPC health reports dependencies ready"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Prometheus metrics"
+          }
+        }
+      }
+    },
+    "/api/v1/shop/catalog": {
+      "get": {
+        "operationId": "catalog_list",
+        "summary": "catalog.list",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Offers"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Offers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/applications": {
+      "get": {
+        "operationId": "applications_list",
+        "summary": "applications.list",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Applications"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Applications"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "applications_create",
+        "summary": "applications.create",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organization": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "organization",
+                  "title",
+                  "city",
+                  "category"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/applications/{id}/approve": {
+      "post": {
+        "operationId": "applications_approve",
+        "summary": "applications.approve",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/applications/{id}/reject": {
+      "post": {
+        "operationId": "applications_reject",
+        "summary": "applications.reject",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/offers": {
+      "get": {
+        "operationId": "offers_list",
+        "summary": "offers.list",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Offers"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Offers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/offers/{id}": {
+      "patch": {
+        "operationId": "offers_update",
+        "summary": "offers.update",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "price_cents": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  "capacity": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/offers/{id}/publish": {
+      "post": {
+        "operationId": "offers_publish",
+        "summary": "offers.publish",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/cart": {
+      "get": {
+        "operationId": "cart_get",
+        "summary": "cart.get",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/cart/items": {
+      "post": {
+        "operationId": "cart_add",
+        "summary": "cart.add",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "offer_id": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20
+                  }
+                },
+                "required": [
+                  "offer_id",
+                  "quantity"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/cart/items/{id}": {
+      "delete": {
+        "operationId": "cart_remove",
+        "summary": "cart.remove",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/orders": {
+      "post": {
+        "operationId": "orders_create",
+        "summary": "orders.create",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Reuse on retries of the same checkout.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "orders_list",
+        "summary": "orders.list",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Orders"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Orders"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/orders/{id}": {
+      "get": {
+        "operationId": "orders_get",
+        "summary": "orders.get",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/orders/{id}/pay": {
+      "post": {
+        "operationId": "orders_pay",
+        "summary": "orders.pay",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scenario": {
+                    "type": "string",
+                    "enum": [
+                      "success",
+                      "error",
+                      "delay",
+                      "timeout"
+                    ]
+                  }
+                },
+                "required": [
+                  "scenario"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/orders/{id}/cancel": {
+      "post": {
+        "operationId": "orders_cancel",
+        "summary": "orders.cancel",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/tickets/{id}/redeem": {
+      "post": {
+        "operationId": "tickets_redeem",
+        "summary": "tickets.redeem",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Opaque entity identifier; redemption uses ticket code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shop/sales": {
+      "get": {
+        "operationId": "sales_get",
+        "summary": "sales.get",
+        "parameters": [
+          {
+            "name": "X-Demo-Actor",
+            "in": "header",
+            "required": true,
+            "description": "Explicit local demo identity, not production authentication. Server determines role.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer-demo",
+                "customer-two",
+                "vendor-demo",
+                "vendor-two",
+                "admin-demo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Entity created",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid argument or missing identity/key",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor forbidden",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid state or insufficient capacity",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Dependency failed",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Dependency timed out",
+            "headers": {
+              "X-Gateway-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Order-Instance": {
+                "description": "Serving replica hostname",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Accepted": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mock",
+          "order_id",
+          "status",
+          "event_id",
+          "trace_id"
+        ],
+        "properties": {
+          "mock": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "order_id": {
+            "type": "string",
+            "enum": [
+              "demo-order-001"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DEMO_ACCEPTED"
+            ]
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mock",
+          "code",
+          "message",
+          "trace_id"
+        ],
+        "properties": {
+          "mock": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_ARGUMENT",
+              "DEPENDENCY_ERROR",
+              "DEADLINE_EXCEEDED"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        }
+      },
+      "BusinessError": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id",
+          "code",
+          "message"
+        ]
+      },
+      "Application": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "Offer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "capacity": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "available": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": []
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "offer_id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "commission_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": []
+      },
+      "Ticket": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "offer_id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "commission_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "tickets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ticket"
+            }
+          }
+        },
+        "required": []
+      },
+      "Applications": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "applications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application"
+            }
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "Offers": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            }
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "Orders": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "ApplicationResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "application": {
+            "$ref": "#/components/schemas/Application"
+          },
+          "offer": {
+            "$ref": "#/components/schemas/Offer"
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "OfferResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "offer": {
+            "$ref": "#/components/schemas/Offer"
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "OrderResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "order": {
+            "$ref": "#/components/schemas/Order"
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "TicketResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "ticket": {
+            "$ref": "#/components/schemas/Ticket"
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "CartResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "cart": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              },
+              "total_cents": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            },
+            "required": []
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      },
+      "SalesResult": {
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "sales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "gross_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "commission_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "net_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "demo",
+          "trace_id"
+        ]
+      }
+    }
+  }
+}

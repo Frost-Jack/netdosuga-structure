@@ -1,0 +1,16 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "$id":"https://netdosuga.example/contracts/demo-order-v1.json",
+ "title":"Technical demo order event, not a business order",
+ "type":"object",
+ "additionalProperties":false,
+ "required":["schema_version","mock","event_id","event_type","order_id","scenario"],
+ "properties":{
+  "schema_version":{"const":1},
+  "mock":{"const":true},
+  "event_id":{"type":"string","format":"uuid"},
+  "event_type":{"const":"demo.order.created"},
+  "order_id":{"const":"demo-order-001"},
+  "scenario":{"enum":["success","delay"]}
+ }
+}

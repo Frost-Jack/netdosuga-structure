@@ -1,0 +1,19 @@
+syntax = "proto3";
+package netdosuga.demo.v1;
+option go_package = "example.com/netdosuga/order-service/api;api";
+service OrderService {
+  rpc CreateDemoOrder(CreateDemoOrderRequest) returns (CreateDemoOrderResponse);
+  rpc Shop(ShopRequest) returns (ShopResponse);
+}
+message CreateDemoOrderRequest { string scenario = 1; }
+message CreateDemoOrderResponse {
+  bool mock = 1;
+  string order_id = 2;
+  string status = 3;
+  string event_id = 4;
+  string trace_id = 5;
+}
+
+message ShopRequest { string operation = 1; string actor = 2; string id = 3; string body_json = 4; string idempotency_key = 5; }
+message ShopResponse { int32 status = 1; string body_json = 2; string instance_id = 3; }
+

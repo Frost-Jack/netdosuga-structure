@@ -1,0 +1,380 @@
+{
+  "paths": {
+    "/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    },
+    "/mock/deliveries": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Last 100 synthetic deliveries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deliveries"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mock/payments": {
+      "post": {
+        "responses": {
+          "405": {
+            "description": "Wrong method"
+          },
+          "504": {
+            "description": "Caller cancelled timeout"
+          },
+          "400": {
+            "description": "Invalid synthetic request"
+          },
+          "200": {
+            "description": "Synthetic success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scenario error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mock/emails": {
+      "post": {
+        "responses": {
+          "405": {
+            "description": "Wrong method"
+          },
+          "400": {
+            "description": "Invalid synthetic request"
+          },
+          "200": {
+            "description": "Synthetic success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    },
+    "/mock/refunds": {
+      "post": {
+        "responses": {
+          "405": {
+            "description": "Wrong method"
+          },
+          "504": {
+            "description": "Caller cancelled timeout"
+          },
+          "400": {
+            "description": "Invalid synthetic request"
+          },
+          "200": {
+            "description": "Synthetic success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scenario error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mock/business-emails": {
+      "post": {
+        "responses": {
+          "405": {
+            "description": "Wrong method"
+          },
+          "400": {
+            "description": "Invalid synthetic request"
+          },
+          "200": {
+            "description": "Synthetic success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessEmailRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mock/business-deliveries": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "mock": {
+                      "const": true
+                    },
+                    "deliveries": {
+                      "maxItems": 1000,
+                      "items": {
+                        "properties": {
+                          "mock": {
+                            "const": true
+                          },
+                          "order_id": {
+                            "type": "string"
+                          },
+                          "event_id": {
+                            "type": "string"
+                          },
+                          "trace_id": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Last 1000 synthetic business deliveries"
+          }
+        }
+      }
+    }
+  },
+  "info": {
+    "version": "1.0.0",
+    "title": "Integration mock adapter fixture"
+  },
+  "components": {
+    "schemas": {
+      "PaymentRequest": {
+        "required": [
+          "scenario"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "scenario": {
+            "enum": [
+              "success",
+              "error",
+              "delay",
+              "timeout"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EmailRequest": {
+        "required": [
+          "mock",
+          "event_id",
+          "order_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "maxLength": 128,
+            "type": "string"
+          },
+          "mock": {
+            "const": true
+          },
+          "order_id": {
+            "const": "demo-order-001"
+          }
+        },
+        "type": "object"
+      },
+      "EmailResponse": {
+        "required": [
+          "mock",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "DEMO_SENT"
+          },
+          "mock": {
+            "const": true
+          }
+        },
+        "type": "object"
+      },
+      "Delivery": {
+        "required": [
+          "mock",
+          "event_id",
+          "order_id",
+          "trace_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "mock": {
+            "const": true
+          },
+          "trace_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          },
+          "order_id": {
+            "const": "demo-order-001"
+          }
+        },
+        "type": "object"
+      },
+      "Deliveries": {
+        "required": [
+          "mock",
+          "deliveries"
+        ],
+        "properties": {
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "mock": {
+            "const": true
+          }
+        },
+        "type": "object"
+      },
+      "PaymentResponse": {
+        "required": [
+          "mock",
+          "payment_id",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "DEMO_SUCCEEDED"
+          },
+          "mock": {
+            "const": true
+          },
+          "payment_id": {
+            "const": "demo-payment-001"
+          }
+        },
+        "type": "object"
+      },
+      "BusinessEmailRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mock",
+          "event_id",
+          "order_id"
+        ],
+        "properties": {
+          "event_id": {
+            "maxLength": 128,
+            "type": "string",
+            "minLength": 1
+          },
+          "order_id": {
+            "maxLength": 128,
+            "type": "string",
+            "minLength": 1
+          },
+          "mock": {
+            "const": true
+          }
+        }
+      }
+    }
+  },
+  "openapi": "3.1.0"
+}

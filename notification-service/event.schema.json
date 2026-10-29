@@ -1,0 +1,11 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "title":"DemoOrderCreatedV1","type":"object","additionalProperties":false,
+ "required":["schema_version","mock","event_id","event_type","order_id","scenario"],
+ "properties":{
+  "schema_version":{"const":1},"mock":{"const":true},
+  "event_id":{"type":"string","minLength":1,"maxLength":128},
+  "event_type":{"const":"demo.order.created"},"order_id":{"const":"demo-order-001"},
+  "scenario":{"enum":["success","delay"]}
+ }
+}

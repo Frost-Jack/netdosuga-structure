@@ -1,0 +1,39 @@
+{
+  "paths": {
+    "/healthz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "responses": {
+          "503": {
+            "description": "Kafka topic or HTTP mock unavailable"
+          },
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational endpoint"
+          }
+        }
+      }
+    }
+  },
+  "info": {
+    "version": "1.0.0",
+    "title": "Notification operations"
+  },
+  "openapi": "3.1.0"
+}
