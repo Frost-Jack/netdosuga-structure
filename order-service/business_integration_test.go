@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -45,14 +46,44 @@ func TestBusinessDatabase(t *testing.T) {
 	if e = migrate(ctx, p); e != nil {
 		t.Fatal(e)
 	}
+	var providerMu sync.Mutex
+	providerPaid := map[string]bool{}
+	providerCancelled := map[string]bool{}
+	loseResponse := false
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var m map[string]string
+		providerMu.Lock()
+		defer providerMu.Unlock()
+		var m map[string]any
 		json.NewDecoder(r.Body).Decode(&m)
-		if m["scenario"] == "error" {
-			w.WriteHeader(503)
+		if strings.HasSuffix(r.URL.Path, "/cancel") {
+			parts := strings.Split(r.URL.Path, "/")
+			id := parts[len(parts)-2]
+			providerCancelled[id] = true
+			refund := ""
+			if providerPaid[id] {
+				refund = "reconciled-refund"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"mock": true, "status": "SUCCEEDED", "order_id": id, "amount_cents": m["amount_cents"], "cancelled": true, "refund_id": refund})
 			return
 		}
-		fmt.Fprint(w, `{"mock":true,"status":"DEMO_SUCCEEDED"}`)
+		id, _ := m["order_id"].(string)
+		if providerCancelled[id] {
+			w.WriteHeader(409)
+			return
+		}
+
+		if m["scenario"] == "error" {
+			w.WriteHeader(503)
+			json.NewEncoder(w).Encode(map[string]string{"code": "MOCK_PROVIDER_ERROR"})
+			return
+		}
+		providerPaid[id] = true
+		if loseResponse {
+			loseResponse = false
+			fmt.Fprint(w, "lost response")
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"mock": true, "status": "SUCCEEDED", "payment_id": "mock-payment", "refund_id": "mock-refund", "order_id": m["order_id"], "amount_cents": m["amount_cents"]})
 	}))
 	defer mock.Close()
 	b := &business{db: p, base: mock.URL, client: mock.Client()}
@@ -132,6 +163,10 @@ func TestBusinessDatabase(t *testing.T) {
 	if _, e = call(winner, "orders.cancel", id, "", `{"scenario":"error"}`); e == nil {
 		t.Fatal("refund failure accepted")
 	}
+	var pendingDecline int
+	if e = p.QueryRow(ctx, "SELECT count(*) FROM business_refund_attempts WHERE order_id=$1", id).Scan(&pendingDecline); e != nil || pendingDecline != 0 {
+		t.Fatal("definite decline left fence", pendingDecline, e)
+	}
 	still := must(winner, "orders.get", id, "", `{}`)["order"].(map[string]any)
 	if still["status"] != "PAID" {
 		t.Fatal("failed refund mutated state")
@@ -170,4 +205,129 @@ func TestBusinessDatabase(t *testing.T) {
 	if e = p.QueryRow(ctx, "SELECT count(*) FROM business_outbox").Scan(&count); e != nil || count != 3 {
 		t.Fatal("outbox transitions", count, e)
 	}
+	// Two replicas race the expired reservation; inventory and event release exactly once.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":2}`)
+	expiring := must("customer-demo", "orders.create", "", "expiry-key", `{}`)["order"].(map[string]any)
+	expiryID := expiring["id"].(string)
+	if _, e = p.Exec(ctx, "UPDATE business_orders SET expires_at=now()-interval '1 minute' WHERE id=$1", expiryID); e != nil {
+		t.Fatal(e)
+	}
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if e := b.expire(ctx); e != nil {
+				t.Error(e)
+			}
+		}()
+	}
+	wg.Wait()
+	if _, e = call("customer-demo", "orders.pay", expiryID, "", `{}`); e == nil {
+		t.Fatal("expired payment accepted")
+	}
+	var state string
+	var available int
+	if e = p.QueryRow(ctx, "SELECT status FROM business_orders WHERE id=$1", expiryID).Scan(&state); e != nil || state != "EXPIRED" {
+		t.Fatal(state, e)
+	}
+	if e = p.QueryRow(ctx, "SELECT available FROM business_offers WHERE id='offer-demo-2'").Scan(&available); e != nil || available != 50 {
+		t.Fatal("inventory released incorrectly", available, e)
+	}
+	if e = p.QueryRow(ctx, "SELECT count(*) FROM business_outbox WHERE payload->>'event_type'='order.expired' AND payload->>'order_id'=$1", expiryID).Scan(&count); e != nil || count != 1 {
+		t.Fatal("expiry events", count, e)
+	}
+
+	// Provider success with a lost response survives outer rollback: expiry refunds before release.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+	uncertain := must("customer-demo", "orders.create", "", "uncertain-key", `{}`)["order"].(map[string]any)
+	uncertainID := uncertain["id"].(string)
+	providerMu.Lock()
+	loseResponse = true
+	providerMu.Unlock()
+	if _, e = call("customer-demo", "orders.pay", uncertainID, "", `{}`); e == nil {
+		t.Fatal("lost response accepted")
+	}
+	if _, e = p.Exec(ctx, "UPDATE business_orders SET expires_at=now()-interval '1 minute' WHERE id=$1", uncertainID); e != nil {
+		t.Fatal(e)
+	}
+	if e = b.expire(ctx); e != nil {
+		t.Fatal(e)
+	}
+	var refund string
+	if e = p.QueryRow(ctx, "SELECT status,refund_id FROM business_orders WHERE id=$1", uncertainID).Scan(&state, &refund); e != nil || state != "EXPIRED" || refund != "reconciled-refund" {
+		t.Fatal("lost response not reconciled", state, refund, e)
+	}
+	// An explicit DB rollback after successful authorize is likewise compensated on cancel.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+	rollbackOrder := must("customer-demo", "orders.create", "", "rollback-key", `{}`)["order"].(map[string]any)
+	rollbackID := rollbackOrder["id"].(string)
+	if _, e = p.Exec(ctx, `CREATE FUNCTION reject_paid() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='PAID' THEN RAISE EXCEPTION 'simulated rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_paid BEFORE UPDATE ON business_orders FOR EACH ROW EXECUTE FUNCTION reject_paid();`); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = call("customer-demo", "orders.pay", rollbackID, "", `{}`); e == nil {
+		t.Fatal("rollback not reproduced")
+	}
+	if _, e = p.Exec(ctx, `DROP TRIGGER reject_paid ON business_orders; DROP FUNCTION reject_paid();`); e != nil {
+		t.Fatal(e)
+	}
+	cancelled := must("customer-demo", "orders.cancel", rollbackID, "", `{}`)["order"].(map[string]any)
+	if cancelled["status"] != "CANCELLED" || cancelled["refund_id"] != "reconciled-refund" {
+		t.Fatal("rollback not compensated", cancelled)
+	}
+
+	// A refund that succeeds remotely but loses its response fences redemption until retry.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+	refundOrder := must("customer-demo", "orders.create", "", "refund-response-key", `{}`)["order"].(map[string]any)
+	refundOrderID := refundOrder["id"].(string)
+	refundPaid := must("customer-demo", "orders.pay", refundOrderID, "", `{}`)["order"].(map[string]any)
+	refundCode := refundPaid["tickets"].([]map[string]any)[0]["code"].(string)
+	providerMu.Lock()
+	loseResponse = true
+	providerMu.Unlock()
+	if _, e = call("customer-demo", "orders.cancel", refundOrderID, "", `{}`); e == nil {
+		t.Fatal("lost refund response accepted")
+	}
+	if _, e = call("vendor-demo", "tickets.redeem", refundCode, "", `{}`); e == nil {
+		t.Fatal("refunded ticket redeemed")
+	}
+	// A subsequent decline cannot erase an earlier uncertain refund intent.
+	if _, e = call("customer-demo", "orders.cancel", refundOrderID, "", `{"scenario":"error"}`); e == nil {
+		t.Fatal("refund decline accepted")
+	}
+	if _, e = call("vendor-demo", "tickets.redeem", refundCode, "", `{}`); e == nil {
+		t.Fatal("uncertain refund intent erased by later decline")
+	}
+	must("customer-demo", "orders.cancel", refundOrderID, "", `{}`)
+	// A database rollback after successful refund also preserves the redemption fence.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+	refundRollback := must("customer-demo", "orders.create", "", "refund-rollback-key", `{}`)["order"].(map[string]any)
+	refundRollbackID := refundRollback["id"].(string)
+	refundRollbackPaid := must("customer-demo", "orders.pay", refundRollbackID, "", `{}`)["order"].(map[string]any)
+	refundRollbackCode := refundRollbackPaid["tickets"].([]map[string]any)[0]["code"].(string)
+	if _, e = p.Exec(ctx, `CREATE FUNCTION reject_cancelled() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='CANCELLED' THEN RAISE EXCEPTION 'simulated rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_cancelled BEFORE UPDATE ON business_orders FOR EACH ROW EXECUTE FUNCTION reject_cancelled();`); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = call("customer-demo", "orders.cancel", refundRollbackID, "", `{}`); e == nil {
+		t.Fatal("refund rollback not reproduced")
+	}
+	if _, e = call("vendor-demo", "tickets.redeem", refundRollbackCode, "", `{}`); e == nil {
+		t.Fatal("refunded ticket redeem after rollback")
+	}
+	if _, e = p.Exec(ctx, `DROP TRIGGER reject_cancelled ON business_orders; DROP FUNCTION reject_cancelled();`); e != nil {
+		t.Fatal(e)
+	}
+	must("customer-demo", "orders.cancel", refundRollbackID, "", `{}`)
+
+	// Cancellation prepared while RESERVED fences a pay arriving between phases.
+	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+	interphase := must("customer-demo", "orders.create", "", "interphase-key", `{}`)["order"].(map[string]any)
+	interphaseID := interphase["id"].(string)
+	if e = b.prepareCancel(ctx, &api.ShopRequest{Actor: "customer-demo", Id: interphaseID}, "customer"); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = call("customer-demo", "orders.pay", interphaseID, "", `{}`); e == nil {
+		t.Fatal("payment bypassed cancellation intent")
+	}
+	must("customer-demo", "orders.cancel", interphaseID, "", `{}`)
+
 }

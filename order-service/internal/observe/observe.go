@@ -2,6 +2,7 @@ package observe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -53,7 +54,7 @@ func Logger(service string) *slog.Logger {
 			a.Key = "message"
 		}
 		return a
-	}})).With("service", service)
+	}})).With("service", service, "instance", Env("HOSTNAME", "local"))
 }
 func Log(ctx context.Context, logger *slog.Logger, message string, args ...any) {
 	sc := trace.SpanContextFromContext(ctx)
@@ -62,8 +63,8 @@ func Log(ctx context.Context, logger *slog.Logger, message string, args ...any) 
 }
 func Error(ctx context.Context, err error) {
 	s := trace.SpanFromContext(ctx)
-	s.RecordError(err)
-	s.SetStatus(codes.Error, err.Error())
+	s.RecordError(errors.New("operation failed"))
+	s.SetStatus(codes.Error, "operation failed")
 }
 func Tracing(ctx context.Context, service string) (func(context.Context) error, error) {
 	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(Env("OTEL_EXPORTER_OTLP_ENDPOINT", "jaeger:4317")), otlptracegrpc.WithInsecure())

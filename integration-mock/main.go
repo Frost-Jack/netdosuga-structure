@@ -117,7 +117,7 @@ func (m *mockServer) list(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]any{"mock": true, "deliveries": items})
 }
 func (m *mockServer) handler() http.Handler {
-	t := newTelemetry("integration-mock")
+	t := newTelemetry("mail-mock")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mock/refunds", t.wrap("/mock/refunds", m.payments))
 	mux.HandleFunc("/mock/business-emails", t.wrap("/mock/business-emails", m.businessEmails))
@@ -144,7 +144,7 @@ func duration(key, fallback string) (time.Duration, error) {
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	tp, err := configure(ctx, "integration-mock")
+	tp, err := configure(ctx, "mail-mock")
 	if err != nil {
 		return err
 	}

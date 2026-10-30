@@ -1,0 +1,12 @@
+# Fresh-project verification override: the entire stack stays on its private network.
+services:
+  http-router:
+    ports: !reset []
+  jaeger:
+    ports: !reset []
+  prometheus:
+    ports: !reset []
+  grafana:
+    ports: !reset []
+  kafka-ui:
+    ports: !reset []

@@ -4,14 +4,16 @@ Push-Location (Join-Path $PSScriptRoot '..')
 try {
     $composeFile=if($HA){'compose.ha.yaml'}else{'compose.yaml'}
     $database='postgres'
-    $logServices=@('gateway','order-service','notification-service','integration-mock')
+    $logServices=@('gateway','order-service','notification-service','integration-mock','identity-service','payment-mock')
     if($HA){
       $route=Get-Content ha/postgres.cfg -Raw
       $database=if($route -match 'pg-a:5432'){'pg-a'}else{'pg-b'}
-      $logServices=@('gateway-a','gateway-b','order-a','order-b','notification-service','integration-mock')
+      $logServices=@('gateway-a','gateway-b','order-a','order-b','notification-service','integration-mock','identity-service','payment-mock')
     }
+    $env:STACK_NETWORK=if($HA){'netdosuga-ha_default'}else{'netdosuga-demo_default'}
+    $env:EXPECTED_PROM_TARGETS=if($HA){'8'}else{'6'}
     New-Item -ItemType Directory -Force test-results | Out-Null
-    docker compose -f $composeFile --profile tools run --rm smoke
+    docker compose -f compose.tests.yaml run --rm smoke
     if ($LASTEXITCODE -ne 0) { throw 'Network smoke failed; inspect test-results/smoke.json' }
     $report = Get-Content test-results/smoke.json -Raw | ConvertFrom-Json
     $ids = @($report.scenarios.success.body.event_id, $report.scenarios.delay.body.event_id)
@@ -26,11 +28,11 @@ try {
     $events = @(docker compose -f $composeFile exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic netdosuga.demo.orders.v1 --from-beginning --timeout-ms 5000 --max-messages 10000 2>$null)
     $ErrorActionPreference = 'Stop'
     $events | Set-Content test-results/kafka-events.jsonl -Encoding utf8
-    docker compose -f $composeFile --profile tools run --rm smoke python validate_events.py
+    docker compose -f compose.tests.yaml run --rm smoke python validate_events.py
     if ($LASTEXITCODE -ne 0) { throw 'Kafka contract validation failed' }
     $logs = @(docker compose -f $composeFile logs --no-color --no-log-prefix @logServices)
     $parsed = @($logs | ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch {} })
-    $services = @('gateway','order-service','notification-service','integration-mock')
+    $services = @('api-gateway','orders-service','notification-worker','mail-mock')
     $evidence = @()
     foreach ($service in $services) {
         $matches = @($parsed | Where-Object { $_.service -eq $service -and $_.trace_id -eq $report.scenarios.success.body.trace_id -and $_.span_id -and $_.timestamp -and $_.level -and $_.message })

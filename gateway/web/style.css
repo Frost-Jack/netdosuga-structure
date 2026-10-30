@@ -1,1 +1,327 @@
-:root{font:15px/1.5 "Segoe UI",system-ui,sans-serif;color:#182637;background:#f1f4f8;--blue:#165bb5}*{box-sizing:border-box}body{margin:0}header{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;background:white;border-bottom:1px solid #cbd4df;gap:20px}h1{font-size:24px;margin:0}h1 span{font-size:14px;font-weight:400;color:#536176}h2{font-size:22px;margin:0}h3{font-size:16px}.notice{padding:10px 32px;margin:0;background:#e7eef7;color:#3f536b;font-size:13px}nav{display:flex;gap:4px;padding:12px 32px;background:white;border-bottom:1px solid #cbd4df;flex-wrap:wrap}button{font:inherit;border:1px solid #aab9ca;border-radius:3px;background:white;color:#174d90;padding:7px 12px;cursor:pointer}button:hover{background:#e7effa}button:disabled{opacity:.5;cursor:wait}nav button.active,button.primary{color:white;background:var(--blue);border-color:var(--blue)}main{max-width:1200px;margin:auto;padding:24px 32px}label{display:inline-flex;flex-direction:column;font-size:13px;gap:4px}input,select{font:inherit;padding:8px;border:1px solid #9fadc0;border-radius:3px;background:white;color:#182637}input[type=number]{width:110px}.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}#filters,form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-bottom:18px}form h3{width:100%;margin-bottom:0}[hidden]{display:none!important}.row{padding:18px 0;border-top:1px solid #cbd4df;display:flex;justify-content:space-between;gap:18px}.row h3{margin:0 0 5px}.muted{color:#59687a;font-size:13px}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.price{font-weight:600}.request{margin-top:28px;border-top:2px solid #a9b6c6;padding-top:8px}.request h3{margin-bottom:4px}#result.error{color:#ae2525}#result.success{color:#205a36}pre{background:#e7ecf2;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;font-size:12px}a{color:var(--blue)}footer{padding:18px 32px;color:#59687a;font-size:12px}.ticket{padding:8px;background:#e7eef7;margin-top:7px}.edit{margin-top:12px}code{overflow-wrap:anywhere} @media(max-width:650px){header{align-items:start;flex-direction:column;padding:16px}main{padding:20px 16px}nav,.notice{padding:10px 16px}.row{flex-direction:column}.actions{justify-content:start}h1 span{display:block}input{max-width:100%}}
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #252525;
+  background: #fff;
+  --accent: #d94b32;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header,
+nav,
+main,
+footer {
+  max-width: 1180px;
+  margin: auto;
+  padding: 24px 32px;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.brand {
+  color: #252525;
+  text-decoration: none;
+  font-size: 29px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+.brand span {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+nav {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  overflow-x: auto;
+}
+button,
+input,
+select {
+  font: inherit;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  padding: 10px 14px;
+  background: #fff;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover {
+  border-color: #252525;
+  background: #f5f5f5;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+button.active,
+.primary,
+.actions button:first-of-type {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+nav button {
+  border: 0;
+  white-space: nowrap;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+input,
+select {
+  min-width: 0;
+  width: 100%;
+  font-weight: 400;
+}
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+h1 {
+  font-size: clamp(32px, 5vw, 52px);
+  letter-spacing: -1.5px;
+  margin: 0;
+}
+h2 {
+  font-size: 23px;
+}
+h3 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+p {
+  line-height: 1.6;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 26px 0;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #777;
+  margin: 0 0 8px;
+}
+.notice {
+  font-size: 13px;
+  background: #f4f3f1;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  margin: 0;
+}
+#filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 20px 0 28px;
+}
+#filters label {
+  flex: 1;
+}
+#content {
+  min-height: 220px;
+}
+#content.catalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.row {
+  border-top: 2px solid #252525;
+  padding: 24px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.catalog .row {
+  background: #f6f5f3;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+}
+.catalog .row::before {
+  content: "НЕТДОСУГА / БИЛЕТ В ГОРОД";
+  letter-spacing: 2px;
+  color: #777;
+  font-size: 10px;
+  padding-bottom: 36px;
+}
+.row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.muted {
+  color: #6d6d6d;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.price {
+  font-size: 27px;
+  font-weight: 700;
+  margin: 16px 0;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 8px;
+  max-width: 310px;
+}
+.catalog .actions {
+  max-width: none;
+  align-items: center;
+  margin-top: auto;
+}
+.actions input {
+  width: 74px;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: end;
+}
+form h2,
+form h3 {
+  width: 100%;
+}
+form label {
+  flex: 1 1 180px;
+}
+#auth,
+#application,
+#redemption {
+  border: 1px solid #ddd;
+  padding: 24px;
+  margin: 24px 0;
+}
+#auth .toolbar {
+  margin-top: 0;
+}
+#auth details {
+  margin-top: 20px;
+  font-size: 13px;
+}
+.edit {
+  margin-top: 20px;
+}
+.edit label {
+  flex-basis: 160px;
+}
+.ticket {
+  border: 1px dashed #aaa;
+  padding: 18px;
+  margin: 16px 0;
+}
+.ticket code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  margin: 12px 0;
+}
+.error {
+  color: #a72e1d;
+  background: #fff1ed;
+  padding: 14px;
+}
+.success {
+  color: #34553b;
+}
+.empty {
+  padding: 44px 0;
+  border-top: 1px solid #ddd;
+}
+.diagnostics {
+  border-top: 1px solid #ddd;
+  padding: 20px 0;
+  margin-top: 48px;
+  color: #6d6d6d;
+  font-size: 12px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f5f5f5;
+  padding: 16px;
+}
+footer {
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 12px;
+  color: #777;
+  margin-top: 40px;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 700px) {
+  header,
+  nav,
+  main,
+  footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  header {
+    align-items: start;
+  }
+  .brand {
+    font-size: 23px;
+  }
+  #account {
+    font-size: 12px;
+    text-align: right;
+  }
+  #account button {
+    margin-top: 6px;
+  }
+  #filters,
+  .row,
+  footer {
+    flex-direction: column;
+  }
+  #filters {
+    align-items: stretch;
+  }
+  #content.catalog {
+    grid-template-columns: 1fr;
+  }
+  .row {
+    gap: 16px;
+  }
+  .actions {
+    max-width: none;
+  }
+  h3 {
+    font-size: 22px;
+  }
+}

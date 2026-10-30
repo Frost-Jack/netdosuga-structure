@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Netdosuga local demo gateway",
-    "version": "2.0.0",
+    "title": "Netdosuga local ticket office",
+    "version": "3.0.0",
     "description": "Synthetic infrastructure demo. Requires APP_ENV=local and MOCK_MODE=true."
   },
   "paths": {
@@ -113,22 +113,6 @@
         "operationId": "catalog_list",
         "summary": "catalog.list",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": false,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "city",
             "in": "query",
@@ -344,24 +328,7 @@
       "get": {
         "operationId": "applications_list",
         "summary": "applications.list",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -555,29 +522,17 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       },
       "post": {
         "operationId": "applications_create",
         "summary": "applications.create",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -801,7 +756,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/applications/{id}/approve": {
@@ -809,22 +769,6 @@
         "operationId": "applications_approve",
         "summary": "applications.approve",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -1028,7 +972,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/applications/{id}/reject": {
@@ -1036,22 +985,6 @@
         "operationId": "applications_reject",
         "summary": "applications.reject",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -1273,31 +1206,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/offers": {
       "get": {
         "operationId": "offers_list",
         "summary": "offers.list",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -1491,7 +1412,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/offers/{id}": {
@@ -1499,22 +1425,6 @@
         "operationId": "offers_update",
         "summary": "offers.update",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -1753,7 +1663,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/offers/{id}/publish": {
@@ -1761,22 +1676,6 @@
         "operationId": "offers_publish",
         "summary": "offers.publish",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -1980,31 +1879,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/cart": {
       "get": {
         "operationId": "cart_get",
         "summary": "cart.get",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -2198,31 +2085,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/cart/items": {
       "post": {
         "operationId": "cart_add",
         "summary": "cart.add",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -2440,7 +2315,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/cart/items/{id}": {
@@ -2448,22 +2328,6 @@
         "operationId": "cart_remove",
         "summary": "cart.remove",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -2667,7 +2531,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/orders": {
@@ -2675,22 +2544,6 @@
         "operationId": "orders_create",
         "summary": "orders.create",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -2896,29 +2749,17 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       },
       "get": {
         "operationId": "orders_list",
         "summary": "orders.list",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -3112,7 +2953,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/orders/{id}": {
@@ -3120,22 +2966,6 @@
         "operationId": "orders_get",
         "summary": "orders.get",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -3339,7 +3169,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/orders/{id}/pay": {
@@ -3347,22 +3182,6 @@
         "operationId": "orders_pay",
         "summary": "orders.pay",
         "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
           {
             "name": "id",
             "in": "path",
@@ -3590,7 +3409,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/orders/{id}/cancel": {
@@ -3599,22 +3423,6 @@
         "summary": "orders.cancel",
         "parameters": [
           {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
-          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -3817,7 +3625,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/tickets/{id}/redeem": {
@@ -3826,22 +3639,6 @@
         "summary": "tickets.redeem",
         "parameters": [
           {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          },
-          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -4044,31 +3841,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/v1/shop/sales": {
       "get": {
         "operationId": "sales_get",
         "summary": "sales.get",
-        "parameters": [
-          {
-            "name": "X-Demo-Actor",
-            "in": "header",
-            "required": true,
-            "description": "Explicit local demo identity, not production authentication. Server determines role.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "customer-demo",
-                "customer-two",
-                "vendor-demo",
-                "vendor-two",
-                "admin-demo"
-              ]
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Operation completed",
@@ -4262,7 +4047,150 @@
               }
             }
           }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "authLogin",
+        "description": "HttpOnly SameSite=Lax session cookie; session tokens are never returned in JSON. Cross-site mutations are rejected.",
+        "responses": {
+          "200": {
+            "description": "Successful identity operation"
+          },
+          "401": {
+            "description": "Invalid credentials or session"
+          },
+          "403": {
+            "description": "Cross-site mutation rejected"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                }
+              }
+            }
+          }
         }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "authRegister",
+        "description": "HttpOnly SameSite=Lax session cookie; session tokens are never returned in JSON. Cross-site mutations are rejected.",
+        "responses": {
+          "201": {
+            "description": "Successful identity operation"
+          },
+          "401": {
+            "description": "Invalid credentials or session"
+          },
+          "403": {
+            "description": "Cross-site mutation rejected"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "name",
+                  "role"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "vendor"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "authSession",
+        "description": "HttpOnly SameSite=Lax session cookie; session tokens are never returned in JSON. Cross-site mutations are rejected.",
+        "responses": {
+          "200": {
+            "description": "Successful identity operation"
+          },
+          "401": {
+            "description": "Invalid credentials or session"
+          },
+          "403": {
+            "description": "Cross-site mutation rejected"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "authLogout",
+        "description": "HttpOnly SameSite=Lax session cookie; session tokens are never returned in JSON. Cross-site mutations are rejected.",
+        "responses": {
+          "204": {
+            "description": "Successful identity operation"
+          },
+          "401": {
+            "description": "Invalid credentials or session"
+          },
+          "403": {
+            "description": "Cross-site mutation rejected"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     }
   },
@@ -4777,6 +4705,13 @@
           "demo",
           "trace_id"
         ]
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "nd_session"
       }
     }
   }

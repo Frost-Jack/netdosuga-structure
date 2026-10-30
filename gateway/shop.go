@@ -5,24 +5,23 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-	"os"
-	"strings"
-	"time"
-
 	"example.com/netdosuga/gateway/api"
 	"example.com/netdosuga/gateway/internal/observe"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 //go:embed web/*
 var webFiles embed.FS
-
 var shopRoutes = map[string]string{
 	"GET /api/v1/shop/catalog":                    "catalog.list",
 	"GET /api/v1/shop/applications":               "applications.list",
@@ -50,13 +49,25 @@ func (g *gateway) shop(operation string) http.HandlerFunc {
 		ctx, span := otel.Tracer("gateway").Start(ctx, r.Pattern, trace.WithSpanKind(trace.SpanKindServer))
 		defer span.End()
 		traceID := span.SpanContext().TraceID().String()
+		started := time.Now()
+		responseStatus := 200
+		var requestPayload, responsePayload map[string]any
+		defer func() {
+			g.recordShop(ctx, operation, r.Method, r.Pattern, responseStatus, started, requestPayload, responsePayload)
+		}()
 		w.Header().Set("Content-Type", "application/json")
 		hostname, _ := os.Hostname()
 		w.Header().Set("X-Gateway-Instance", hostname)
 		fail := func(httpCode int, code, message string) {
+			responseStatus = httpCode
+			responsePayload = map[string]any{"status": httpCode}
 			observe.Error(ctx, errors.New(message))
 			w.WriteHeader(httpCode)
 			json.NewEncoder(w).Encode(map[string]any{"demo": true, "code": code, "message": message, "trace_id": traceID})
+		}
+		if !mutationGuard(r) {
+			fail(403, "FORBIDDEN", "Запрос с другого сайта запрещён")
+			return
 		}
 		body := map[string]any{}
 		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
@@ -77,6 +88,7 @@ func (g *gateway) shop(operation string) http.HandlerFunc {
 				}
 			}
 		}
+		requestPayload = body
 		encoded, _ := json.Marshal(body)
 		// Business transactions include the payment mock's own bounded deadline.
 		deadline := g.timeout
@@ -85,7 +97,10 @@ func (g *gateway) shop(operation string) http.HandlerFunc {
 		}
 		callCtx, cancel := context.WithTimeout(ctx, deadline)
 		defer cancel()
-		result, err := g.client.Shop(callCtx, &api.ShopRequest{Operation: operation, Actor: r.Header.Get("X-Demo-Actor"), Id: r.PathValue("id"), BodyJson: string(encoded), IdempotencyKey: r.Header.Get("Idempotency-Key")})
+		if cookie, err := r.Cookie("nd_session"); err == nil {
+			callCtx = metadata.AppendToOutgoingContext(callCtx, "authorization", "Bearer "+cookie.Value)
+		}
+		result, err := g.client.Shop(callCtx, &api.ShopRequest{Operation: operation, Id: r.PathValue("id"), BodyJson: string(encoded), IdempotencyKey: r.Header.Get("Idempotency-Key")})
 		if err != nil {
 			if status.Code(err) == codes.DeadlineExceeded {
 				fail(504, "DEADLINE_EXCEEDED", "business dependency timed out")
@@ -104,12 +119,16 @@ func (g *gateway) shop(operation string) http.HandlerFunc {
 		if result.Status >= 400 {
 			observe.Error(ctx, errors.New("business operation rejected"))
 		}
+		responseStatus = int(result.Status)
+		responsePayload = response
 		w.WriteHeader(int(result.Status))
 		json.NewEncoder(w).Encode(response)
 	}
 }
-
 func (g *gateway) registerShop(mux *http.ServeMux, metrics *observe.HTTPMetrics) {
+	for route, operation := range map[string]string{"POST /api/v1/auth/login": "login", "POST /api/v1/auth/register": "register", "POST /api/v1/auth/logout": "logout", "GET /api/v1/auth/session": "session"} {
+		mux.Handle(route, metrics.Wrap(strings.SplitN(route, " ", 2)[1], g.auth(operation)))
+	}
 	for route, operation := range shopRoutes {
 		mux.Handle(route, metrics.Wrap(strings.SplitN(route, " ", 2)[1], g.shop(operation)))
 	}

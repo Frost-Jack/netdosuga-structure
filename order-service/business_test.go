@@ -22,7 +22,7 @@ func TestShopErrorMarksSpan(t *testing.T) {
 	s := &orderServer{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	reply, err := s.Shop(ctx, &api.ShopRequest{Actor: "unsupported", Operation: "orders.list"})
 	span.End()
-	if err != nil || reply.Status != 403 {
+	if err != nil || reply.Status != 401 {
 		t.Fatal(reply, err)
 	}
 	ended := recorder.Ended()
@@ -35,7 +35,7 @@ func TestBusinessIdentityAllowlist(t *testing.T) {
 	s := &orderServer{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	for _, actor := range []string{"root", "vendor-other", "customer", "admin"} {
 		r, e := s.Shop(context.Background(), &api.ShopRequest{Actor: actor, Operation: "orders.list"})
-		if e != nil || r.Status != 403 {
+		if e != nil || r.Status != 401 {
 			t.Fatalf("%s: %v %v", actor, r, e)
 		}
 	}

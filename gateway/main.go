@@ -4,17 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
 	"example.com/netdosuga/gateway/api"
 	"example.com/netdosuga/gateway/internal/observe"
+	"fmt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -24,6 +16,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 type gateway struct {
@@ -83,7 +82,7 @@ func (g *gateway) create(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"mock": result.Mock, "order_id": result.OrderId, "status": result.Status, "event_id": result.EventId, "trace_id": traceID})
 }
 func run() error {
-	logger := observe.Logger("gateway")
+	logger := observe.Logger("api-gateway")
 	if err := observe.DemoOnly(); err != nil {
 		return err
 	}
@@ -93,7 +92,7 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	shutdown, err := observe.Tracing(ctx, "gateway")
+	shutdown, err := observe.Tracing(ctx, "api-gateway")
 	if err != nil {
 		return err
 	}
@@ -105,9 +104,10 @@ func run() error {
 	defer conn.Close()
 	handler := &gateway{api.NewOrderServiceClient(conn), timeout, logger}
 	mux := http.NewServeMux()
-	metrics := observe.NewHTTPMetrics("gateway")
+	metrics := observe.NewHTTPMetrics("api-gateway")
 	mux.Handle("POST /api/v1/demo/orders", metrics.Wrap("/api/v1/demo/orders", http.HandlerFunc(handler.create)))
 	handler.registerShop(mux, metrics)
+	registerSwagger(mux)
 	observe.Endpoints(mux, metrics, func(c context.Context) error {
 		out, e := grpc_health_v1.NewHealthClient(conn).Check(c, &grpc_health_v1.HealthCheckRequest{})
 		if e != nil {
@@ -135,7 +135,7 @@ func run() error {
 }
 func main() {
 	if err := run(); err != nil {
-		observe.Logger("gateway").Error("startup or runtime failed", "error", err.Error())
+		observe.Logger("api-gateway").Error("startup or runtime failed", "error", err.Error())
 		os.Exit(1)
 	}
 }

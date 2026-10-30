@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 
 REPORT = {'started_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'checks': {}, 'scenarios': {}}
-SERVICES = {'gateway', 'order-service', 'notification-service', 'integration-mock'}
+SERVICES = {'api-gateway', 'orders-service', 'notification-worker', 'mail-mock'}
 
 def request(url, body=None, auth=False, raw=False):
     headers = {}
@@ -59,7 +59,7 @@ def trace(trace_id, all_services=False, error=False, delay=False):
     if error and not errors:
         return None
     maximum = max(s['duration'] for s in spans)
-    payment_spans = [s for s in spans if data['processes'][s['processID']]['serviceName'] == 'integration-mock' and s['operationName'] == 'POST /mock/payments']
+    payment_spans = [s for s in spans if data['processes'][s['processID']]['serviceName'] == 'mail-mock' and s['operationName'] == 'POST /mock/payments']
     if delay and not any(s['duration'] >= 200000 for s in payment_spans):
         return None
     return {'trace_id': trace_id, 'services': sorted(names), 'error_spans': errors, 'max_duration_us': maximum, 'span_count': len(spans)}
@@ -107,17 +107,17 @@ def run():
     def targets():
         status, result = request('http://prometheus:9090/api/v1/targets')
         active = result['data']['activeTargets']
-        assert status == 200 and len(active) == int(os.environ.get('EXPECTED_PROM_TARGETS', '4')) and all(t['health']=='up' for t in active), active
+        assert status == 200 and len(active) == int(os.environ.get('EXPECTED_PROM_TARGETS', '6')) and all(t['health']=='up' for t in active), active
         return [{'target':t['scrapeUrl'],'health':t['health']} for t in active]
     eventually('prometheus_targets', targets)
     expressions = ['netdosuga_http_requests_total','netdosuga_http_request_duration_seconds_count','netdosuga_grpc_requests_total','netdosuga_grpc_request_duration_seconds_count','netdosuga_events_total']
     for expression in expressions:
         eventually('metric_' + expression, lambda expression=expression: [r for r in prom(expression) if float(r['value'][1]) > 0])
     for status in ('502', '504'):
-        expression = 'netdosuga_http_requests_total{service="gateway",status="' + status + '"}'
+        expression = 'netdosuga_http_requests_total{service="api-gateway",status="' + status + '"}'
         eventually('metric_gateway_error_' + status, lambda expression=expression: [r for r in prom(expression) if float(r['value'][1]) > 0])
     for code in ('Unavailable', 'DeadlineExceeded'):
-        expression = 'netdosuga_grpc_requests_total{service="order-service",code="' + code + '"}'
+        expression = 'netdosuga_grpc_requests_total{service="orders-service",code="' + code + '"}'
         eventually('metric_grpc_error_' + code, lambda expression=expression: [r for r in prom(expression) if float(r['value'][1]) > 0])
     def grafana():
         status, source = request('http://grafana:3000/api/datasources/uid/prometheus',auth=True)
@@ -132,6 +132,15 @@ def run():
             # Generate traffic between scrapes so rate/histogram queries have deltas.
             status, _ = request('http://gateway:8080/api/v1/demo/orders', {'scenario':'success'})
             assert status == 200
+            if 'netdosuga_operation' in expression:
+                import uuid
+                oid='smoke-'+str(uuid.uuid4())
+                for scenario in ('error','success'):
+                    req=urllib.request.Request('http://payment-mock:8085/v1/payments',data=json.dumps({'order_id':oid,'amount_cents':100,'currency':'RUB','scenario':scenario}).encode(),headers={'Content-Type':'application/json','Idempotency-Key':'payment:'+oid})
+                    try:
+                        with urllib.request.urlopen(req,timeout=8) as response: response.read()
+                    except urllib.error.HTTPError as error:
+                        assert error.code==503
             status, result = request('http://grafana:3000/api/datasources/proxy/uid/prometheus/api/v1/query?' + urllib.parse.urlencode({'query': expression}), auth=True)
             assert status == 200 and result['status'] == 'success', result
             series = result['data']['result']

@@ -1,14 +1,16 @@
 """Business demo E2E; standard library, unique offers and preserved application history."""
-import json, os, time, uuid, urllib.request, urllib.error
+import json, os, time, uuid, urllib.request, urllib.error, http.cookiejar
 from pathlib import Path
 BASE=os.getenv('GATEWAY_URL','http://gateway:8080')+'/api/v1/shop'
+SESSIONS={}
+USERS={}
 REPORT={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'checks':[]}
 def call(method,path,body=None,actor='customer-demo',key=None,expected=(200,201)):
-    headers={'X-Demo-Actor':actor,'Content-Type':'application/json'}
+    headers={'Content-Type':'application/json'}
     if key: headers['Idempotency-Key']=key
     req=urllib.request.Request(BASE+path,data=None if body is None else json.dumps(body).encode(),headers=headers,method=method)
     try:
-        with urllib.request.urlopen(req,timeout=12) as r: status=r.status; value=json.load(r)
+        with SESSIONS[actor].open(req,timeout=12) as r: status=r.status; value=json.load(r)
     except urllib.error.HTTPError as e: status=e.code; value=json.load(e)
     assert status in expected,(method,path,status,value)
     assert value['demo'] is True and len(value['trace_id'])==32,value
@@ -31,6 +33,13 @@ def clear(actor):
         call('DELETE','/cart/items/'+item['offer_id'],actor=actor)
 
 def run():
+    for actor,email in [('customer-demo','buyer'),('customer-two','buyer2'),('vendor-demo','vendor'),('vendor-two','vendor2'),('admin-demo','admin')]:
+        opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        req=urllib.request.Request(BASE.removesuffix('/shop')+'/auth/login',data=json.dumps({'email':email+'@netdosuga.local','password':os.getenv('MVP_SEED_PASSWORD','demo12345')}).encode(),headers={'Content-Type':'application/json'})
+        with opener.open(req,timeout=12) as response: value=json.load(response)
+        assert 'session_token' not in value
+        SESSIONS[actor]=opener;USERS[actor]=value['user']['id']
+    check('real_login_cookie_sessions_no_exposed_tokens')
     a=offer('vendor-demo'); b=offer('vendor-two'); check('application_approval_publish_and_roles')
     clear('customer-demo');clear('customer-two')
     for oid in (a,b):call('POST','/cart/items',{'offer_id':oid,'quantity':1})
@@ -47,13 +56,15 @@ def run():
     check('insufficient_stock_does_not_overreserve')
     call('POST',f'/orders/{oid}/pay',{'scenario':'error'},expected=(502,))
     assert call('GET',f'/orders/{oid}')['order']['status']=='RESERVED'
-    paid=call('POST',f'/orders/{oid}/pay',{'scenario':'success'})['order']
+    paid_response=call('POST',f'/orders/{oid}/pay',{'scenario':'success'})
+    REPORT['payment_trace_id']=paid_response['trace_id']
+    paid=paid_response['order']
     repeated=call('POST',f'/orders/{oid}/pay',{'scenario':'success'})['order']
     assert paid['status']=='PAID' and len(paid['tickets'])==2 and [t['code'] for t in repeated['tickets']]==[t['code'] for t in paid['tickets']]
     call('POST',f'/orders/{oid}/cancel',{'scenario':'error'},expected=(502,))
     assert call('GET',f'/orders/{oid}')['order']['status']=='PAID'
     check('payment_error_retry_idempotency_and_refund_failure_atomicity')
-    ticket=next(t for t in paid['tickets'] if t['vendor_id']=='vendor-demo')
+    ticket=next(t for t in paid['tickets'] if t['vendor_id']==USERS['vendor-demo'])
     call('POST','/tickets/'+ticket['code']+'/redeem',{},'vendor-two',expected=(403,))
     call('POST','/tickets/'+ticket['code']+'/redeem',{},'vendor-demo')
     call('POST','/tickets/'+ticket['code']+'/redeem',{},'vendor-demo',expected=(409,))

@@ -1,6 +1,6 @@
 {
   "uid": "netdosuga-demo",
-  "title": "Netdosuga technical demo",
+  "title": "Netdosuga services and purchase operations",
   "schemaVersion": 41,
   "version": 1,
   "refresh": "5s",
@@ -224,6 +224,101 @@
         "overrides": []
       },
       "options": {}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Business operation rate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service, operation, outcome) (rate(netdosuga_operations_total[5m]))",
+          "legendFormat": "{{service}} {{operation}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Business operation errors",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service, operation) (rate(netdosuga_operations_total{outcome=\"error\"}[5m]))",
+          "legendFormat": "{{service}} {{operation}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Business operation latency p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, service, operation) (rate(netdosuga_operation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{service}} {{operation}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "links": [
+    {
+      "title": "Jaeger traces and sanitized request/response",
+      "type": "link",
+      "url": "http://localhost:16686",
+      "targetBlank": true
     }
   ]
 }

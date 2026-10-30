@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>НетДосуга API · Swagger UI</title>
+  <link rel="stylesheet" href="/swagger/swagger-ui.css">
+</head>
+<body>
+  <header style="max-width:1460px;margin:24px auto;padding:0 20px;font-family:sans-serif">
+    <h1>НетДосуга API</h1>
+    <p>Для защищённых операций сначала выполните POST /api/v1/auth/login через Try it out.
+      Браузер сохранит HttpOnly cookie nd_session и отправит её при следующих запросах.
+      POST /api/v1/auth/logout завершает сессию. Вручную вводить cookie в Authorize не требуется.</p>
+    <p>Локальная демонстрация: платежи и возвраты имитируются. <a href="/">Открыть кассу</a> · <a href="/openapi.yaml">Контракт OpenAPI (JSON)</a> · Swagger UI: <a href="/swagger/LICENSE">Apache-2.0</a>, <a href="/swagger/NOTICE">NOTICE</a></p>
+  </header>
+  <div id="swagger-ui"></div>
+  <script src="/swagger/swagger-ui-bundle.js"></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: "/openapi.yaml",
+      dom_id: "#swagger-ui",
+      validatorUrl: null,
+      persistAuthorization: false,
+      withCredentials: true,
+      deepLinking: true
+    });
+  </script>
+</body>
+</html>

@@ -153,7 +153,7 @@ func readiness(ctx context.Context, broker, topic, base string, client *http.Cli
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	tp, err := configure(ctx, "notification-service")
+	tp, err := configure(ctx, "notification-worker")
 	if err != nil {
 		return err
 	}
@@ -171,13 +171,20 @@ func run() error {
 	defer db.Close()
 	brokers := strings.Split(env("KAFKA_BROKERS", "kafka:9092"), ",")
 	topic := env("KAFKA_TOPIC", "netdosuga.demo.orders.v1")
+	businessTopic := env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1")
+	topicCtx, topicCancel := context.WithTimeout(ctx, 45*time.Second)
+	err = ensureTopics(topicCtx, &kafka.Client{Addr: kafka.TCP(brokers...), Timeout: 3 * time.Second}, topic, businessTopic)
+	topicCancel()
+	if err != nil {
+		return err
+	}
 	base := strings.TrimRight(env("MOCK_BASE_URL", "http://integration-mock:8083"), "/")
-	t := newTelemetry("notification-service")
-	events := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "netdosuga_events_total", ConstLabels: prometheus.Labels{"service": "notification-service"}}, []string{"outcome"})
+	t := newTelemetry("notification-worker")
+	events := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "netdosuga_events_total", ConstLabels: prometheus.Labels{"service": "notification-worker"}}, []string{"outcome"})
 	t.registry.MustRegister(events)
 	n := &notifier{client: &http.Client{Timeout: time.Second}, base: base, events: events}
-	reader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: env("KAFKA_GROUP_ID", "netdosuga-demo-notification-v1"), StartOffset: kafka.FirstOffset, CommitInterval: 0, MaxWait: 500 * time.Millisecond, Dialer: &kafka.Dialer{Timeout: time.Second}})
-	businessReader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1"), GroupID: "netdosuga-business-notification-v1", StartOffset: kafka.FirstOffset, CommitInterval: 0, MaxWait: 500 * time.Millisecond})
+	reader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: env("KAFKA_GROUP_ID", "netdosuga-demo-notification-v1"), StartOffset: kafka.FirstOffset, CommitInterval: 0, WatchPartitionChanges: true, PartitionWatchInterval: time.Second, MaxWait: 500 * time.Millisecond, Dialer: &kafka.Dialer{Timeout: time.Second}})
+	businessReader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: businessTopic, GroupID: "netdosuga-business-notification-v1", StartOffset: kafka.FirstOffset, CommitInterval: 0, WatchPartitionChanges: true, PartitionWatchInterval: time.Second, MaxWait: 500 * time.Millisecond})
 	defer businessReader.Close()
 	go n.consumeBusiness(ctx, db, businessReader)
 	done := make(chan struct{})
@@ -187,7 +194,7 @@ func run() error {
 	mux.HandleFunc("/readyz", t.wrap("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		c, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if db.Ping(c) != nil || readiness(c, brokers[0], topic, base, n.client) != nil {
+		if writableDB(c, db) != nil || readiness(c, brokers[0], topic, base, n.client) != nil || readiness(c, brokers[0], businessTopic, base, n.client) != nil {
 			http.Error(w, "dependencies unavailable", 503)
 			return
 		}

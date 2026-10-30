@@ -20,6 +20,7 @@ import (
 	"example.com/netdosuga/order-service/api"
 	"example.com/netdosuga/order-service/internal/observe"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
@@ -40,14 +41,27 @@ var migration string
 //go:embed migrations/002_business.sql
 var businessMigration string
 
+//go:embed migrations/003_sessions_payments_expiry.sql
+var expiryMigration string
+
+//go:embed migrations/004_payment_intents.sql
+var paymentIntentMigration string
+
+//go:embed migrations/005_refund_intents.sql
+var refundIntentMigration string
+
+//go:embed migrations/006_legacy_paid_fixture.sql
+var legacyPaidMigration string
+
 type orderServer struct {
 	api.UnimplementedOrderServiceServer
-	business   *business
-	paymentURL string
-	httpClient *http.Client
-	insert     func(context.Context, string, string) error
-	publish    func(context.Context, []byte, []kafka.Header) error
-	logger     *slog.Logger
+	business    *business
+	identityURL string
+	paymentURL  string
+	httpClient  *http.Client
+	insert      func(context.Context, string, string) error
+	publish     func(context.Context, []byte, []kafka.Header) error
+	logger      *slog.Logger
 }
 type demoEvent struct {
 	SchemaVersion int    `json:"schema_version"`
@@ -102,7 +116,7 @@ func (s *orderServer) CreateDemoOrder(ctx context.Context, in *api.CreateDemoOrd
 		return fail(codes.Unavailable, "invalid mock payment response", fmt.Errorf("unexpected payment fixture"))
 	}
 	eventID := uuid.NewString()
-	dbCtx, dbSpan := otel.Tracer("order-service").Start(ctx, "INSERT demo_receipts", trace.WithSpanKind(trace.SpanKindClient))
+	dbCtx, dbSpan := otel.Tracer("orders-service").Start(ctx, "INSERT demo_receipts", trace.WithSpanKind(trace.SpanKindClient))
 	err = s.insert(dbCtx, eventID, in.Scenario)
 	if err != nil {
 		observe.Error(dbCtx, err)
@@ -112,7 +126,7 @@ func (s *orderServer) CreateDemoOrder(ctx context.Context, in *api.CreateDemoOrd
 		return fail(codes.Unavailable, "demo receipt unavailable", err)
 	}
 	payload, _ := json.Marshal(demoEvent{1, true, eventID, "demo.order.created", "demo-order-001", in.Scenario})
-	sendCtx, sendSpan := otel.Tracer("order-service").Start(ctx, "publish demo.order.created", trace.WithSpanKind(trace.SpanKindProducer))
+	sendCtx, sendSpan := otel.Tracer("orders-service").Start(ctx, "publish demo.order.created", trace.WithSpanKind(trace.SpanKindProducer))
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(sendCtx, carrier)
 	headers := make([]kafka.Header, 0, len(carrier))
@@ -147,8 +161,8 @@ func (h *healthServer) Check(ctx context.Context, in *grpc_health_v1.HealthCheck
 	return &grpc_health_v1.HealthCheckResponse{Status: state}, nil
 }
 func grpcMetrics() grpc.UnaryServerInterceptor {
-	requests := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "netdosuga_grpc_requests_total", Help: "gRPC requests", ConstLabels: prometheus.Labels{"service": "order-service"}}, []string{"method", "code"})
-	duration := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "netdosuga_grpc_request_duration_seconds", Help: "gRPC duration", ConstLabels: prometheus.Labels{"service": "order-service"}}, []string{"method"})
+	requests := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "netdosuga_grpc_requests_total", Help: "gRPC requests", ConstLabels: prometheus.Labels{"service": "orders-service"}}, []string{"method", "code"})
+	duration := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "netdosuga_grpc_request_duration_seconds", Help: "gRPC duration", ConstLabels: prometheus.Labels{"service": "orders-service"}}, []string{"method"})
 	prometheus.MustRegister(requests, duration)
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		started := time.Now()
@@ -163,7 +177,7 @@ func grpcMetrics() grpc.UnaryServerInterceptor {
 	}
 }
 func run() error {
-	logger := observe.Logger("order-service")
+	logger := observe.Logger("orders-service")
 	if err := observe.DemoOnly(); err != nil {
 		return err
 	}
@@ -173,7 +187,7 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	shutdown, err := observe.Tracing(ctx, "order-service")
+	shutdown, err := observe.Tracing(ctx, "orders-service")
 	if err != nil {
 		return err
 	}
@@ -182,7 +196,13 @@ func run() error {
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return fmt.Errorf("database configuration invalid")
+	}
+	config.ConnConfig.Tracer = observe.QueryTracer{}
+	config.ConnConfig.ValidateConnect = pgconn.ValidateConnectTargetSessionAttrsReadWrite
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return fmt.Errorf("database configuration invalid")
 	}
@@ -195,11 +215,11 @@ func run() error {
 	brokers := strings.Split(observe.Env("KAFKA_BROKERS", "kafka:9092"), ",")
 	topic := observe.Env("KAFKA_TOPIC", "netdosuga.demo.orders.v1")
 	mockURL := strings.TrimRight(observe.Env("MOCK_BASE_URL", "http://integration-mock:8083"), "/")
-	writer := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: topic, Balancer: &kafka.LeastBytes{}, RequiredAcks: kafka.RequireAll, Async: false, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
+	writer := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: topic, Balancer: &kafka.LeastBytes{}, RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: true, Async: false, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
 	defer writer.Close()
 	client := &http.Client{Timeout: timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	ready := func(c context.Context) error {
-		if err := pool.Ping(c); err != nil {
+		if err := observe.Writable(c, pool); err != nil {
 			return err
 		}
 		req, err := http.NewRequestWithContext(c, http.MethodGet, mockURL+"/readyz", nil)
@@ -216,15 +236,15 @@ func run() error {
 		}
 		return nil
 	}
-	service := &orderServer{paymentURL: mockURL, httpClient: client, logger: logger, insert: func(c context.Context, id, scenario string) error {
+	service := &orderServer{identityURL: observe.Env("IDENTITY_BASE_URL", "http://identity-service:8084"), paymentURL: mockURL, httpClient: client, logger: logger, insert: func(c context.Context, id, scenario string) error {
 		_, e := pool.Exec(c, "INSERT INTO demo_receipts(event_id,scenario) VALUES($1,$2)", id, scenario)
 		return e
 	}, publish: func(c context.Context, value []byte, headers []kafka.Header) error {
 		return writer.WriteMessages(c, kafka.Message{Value: value, Headers: headers})
 	}}
-	businessWriter := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: observe.Env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1"), RequiredAcks: kafka.RequireAll, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
+	businessWriter := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: observe.Env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1"), RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: true, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
 	defer businessWriter.Close()
-	service.business = &business{db: pool, client: client, base: mockURL, writer: businessWriter}
+	service.business = &business{db: pool, client: client, legacyBase: mockURL, base: strings.TrimRight(observe.Env("PAYMENT_BASE_URL", "http://payment-mock:8085"), "/"), writer: businessWriter}
 	go service.business.outbox(ctx)
 	rpc := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()), grpc.UnaryInterceptor(grpcMetrics()))
 	api.RegisterOrderServiceServer(rpc, service)
@@ -234,7 +254,7 @@ func run() error {
 		return err
 	}
 	mux := http.NewServeMux()
-	observe.Endpoints(mux, observe.NewHTTPMetrics("order-service"), ready)
+	observe.Endpoints(mux, observe.NewHTTPMetrics("orders-service"), ready)
 	server := &http.Server{Addr: observe.Env("HTTP_ADDR", ":8081"), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	failures := make(chan error, 2)
 	go func() { failures <- rpc.Serve(listener) }()
@@ -262,7 +282,7 @@ func run() error {
 }
 func main() {
 	if err := run(); err != nil {
-		observe.Logger("order-service").Error("startup or runtime failed", "error", err.Error())
+		observe.Logger("orders-service").Error("startup or runtime failed", "error", err.Error())
 		os.Exit(1)
 	}
 }

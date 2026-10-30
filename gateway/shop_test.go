@@ -12,18 +12,24 @@ import (
 	"example.com/netdosuga/gateway/api"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
 type shopClient struct {
 	api.OrderServiceClient
-	request *api.ShopRequest
-	result  *api.ShopResponse
-	err     error
+	request       *api.ShopRequest
+	authorization string
+	result        *api.ShopResponse
+	err           error
 }
 
 func (c *shopClient) Shop(ctx context.Context, r *api.ShopRequest, opts ...grpc.CallOption) (*api.ShopResponse, error) {
 	c.request = r
+	md, _ := metadata.FromOutgoingContext(ctx)
+	if values := md.Get("authorization"); len(values) > 0 {
+		c.authorization = values[0]
+	}
 	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) < 4*time.Second {
 		return nil, status.Error(codes.Internal, "missing transaction deadline")
 	}
@@ -44,10 +50,12 @@ func TestShopMapping(t *testing.T) {
 		}
 		req := httptest.NewRequest(parts[0], path, strings.NewReader(`{"scenario":"delay"}`))
 		req.Header.Set("X-Demo-Actor", "customer-demo")
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Idempotency-Key", "key-1")
+		req.AddCookie(&http.Cookie{Name: "nd_session", Value: "private-session"})
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
-		if w.Code != 201 || client.request.Operation != operation || client.request.Actor != "customer-demo" || client.request.IdempotencyKey != "key-1" {
+		if w.Code != 201 || client.request.Operation != operation || client.request.Actor != "" || client.authorization != "Bearer private-session" || client.request.IdempotencyKey != "key-1" {
 			t.Fatalf("route %s: %d %+v", route, w.Code, client.request)
 		}
 		if strings.Contains(route, "{id}") && client.request.Id != "opaque-123" {
@@ -94,7 +102,9 @@ func TestShopErrors(t *testing.T) {
 			client := &shopClient{result: test.result, err: test.err}
 			g := &gateway{client: client}
 			w := httptest.NewRecorder()
-			g.shop("orders.create")(w, httptest.NewRequest("POST", "/", strings.NewReader(test.body)))
+			req := httptest.NewRequest("POST", "/", strings.NewReader(test.body))
+			req.Header.Set("Content-Type", "application/json")
+			g.shop("orders.create")(w, req)
 			if w.Code != test.want {
 				t.Fatalf("got %d: %s", w.Code, w.Body.String())
 			}
@@ -117,7 +127,7 @@ func TestEmbeddedUI(t *testing.T) {
 	if strings.Contains(string(script), "innerHTML") {
 		t.Fatal("user-controlled business fields must use textContent")
 	}
-	if !strings.Contains(string(script), "order.status==='RESERVED'") {
+	if !strings.Contains(string(script), `order.status === "RESERVED"`) {
 		t.Fatal("payment must be available for reserved orders")
 	}
 }

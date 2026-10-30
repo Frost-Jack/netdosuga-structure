@@ -35,7 +35,7 @@ if ($Action -eq 'failover') {
   Sql $standby "ALTER SYSTEM SET synchronous_standby_names = ''" | Out-Null
   Sql $standby 'select pg_reload_conf()' | Out-Null
   $config.Replace("$($primary):5432","$($standby):5432") | Set-Content $route -NoNewline
-  Dc restart postgres
+  Dc restart postgres-router
   AssertRoute $standby
   Write-Output "Fenced $primary; promoted $standby. DEGRADED: commits currently have one durable PostgreSQL copy. Run rejoin."
 } elseif ($Action -eq 'rejoin') {
@@ -44,7 +44,7 @@ if ($Action -eq 'failover') {
   # then clone the authoritative primary. No volume deletion and no baseline database access.
   Dc run --rm --no-deps -e "RECLONE_FROM=$primary" -e RECLONE_ONLY=true $standby
   Dc up -d --no-build --no-deps --wait $standby
-  Dc restart postgres
+  Dc restart postgres-router
   & $PSCommandPath sync
   AssertRoute $primary
   if ($LASTEXITCODE -ne 0) { throw "Sync restoration failed" }

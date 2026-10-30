@@ -23,10 +23,11 @@ import (
 )
 
 type business struct {
-	db     *pgxpool.Pool
-	client *http.Client
-	base   string
-	writer *kafka.Writer
+	db         *pgxpool.Pool
+	client     *http.Client
+	base       string
+	legacyBase string
+	writer     *kafka.Writer
 }
 type problem struct {
 	status int
@@ -50,13 +51,20 @@ func actorRole(actor string) string {
 func (s *orderServer) Shop(ctx context.Context, r *api.ShopRequest) (*api.ShopResponse, error) {
 	result := map[string]any{}
 	status := 200
-	role := actorRole(r.Actor)
-	if r.Operation == "catalog.list" && r.Actor == "" {
-		role = "public"
-	}
+	started := time.Now()
+	parentCtx := ctx
+	ctx, span := otel.Tracer("orders-service").Start(ctx, "operation."+fixedOperation(r.Operation))
+	defer span.End()
+	requestPayload := observe.Payload(ctx, "request", diagnosticRequest(r))
+	role := "public"
 	var err error
-	if role == "" {
-		err = forbidden()
+	clone := *r
+	clone.Actor = ""
+	r = &clone
+	if r.Operation != "catalog.list" {
+		r.Actor, role, err = s.resolveActor(ctx, r)
+	}
+	if err != nil {
 	} else if s.business == nil {
 		err = problem{503, "UNAVAILABLE"}
 	} else {
@@ -64,6 +72,7 @@ func (s *orderServer) Shop(ctx context.Context, r *api.ShopRequest) (*api.ShopRe
 	}
 	if err != nil {
 		observe.Error(ctx, err)
+		observe.Error(parentCtx, err)
 		p := problem{503, "UNAVAILABLE"}
 		var known problem
 		if errors.As(err, &known) {
@@ -73,12 +82,15 @@ func (s *orderServer) Shop(ctx context.Context, r *api.ShopRequest) (*api.ShopRe
 		result = map[string]any{"code": p.code, "message": p.code}
 		if status >= 500 {
 			sc := trace.SpanContextFromContext(ctx)
-			s.logger.ErrorContext(ctx, "business command failed", "operation", r.Operation, "error", err.Error(), "trace_id", sc.TraceID().String(), "span_id", sc.SpanID().String())
+			s.logger.ErrorContext(ctx, "business command failed", "operation", fixedOperation(r.Operation), "trace_id", sc.TraceID().String(), "span_id", sc.SpanID().String())
 		}
 	}
 	if err == nil {
-		observe.Log(ctx, s.logger, "business command completed", "operation", r.Operation, "status", status)
+		observe.Log(ctx, s.logger, "business command completed", "operation", fixedOperation(r.Operation), "status", status)
 	}
+	observe.Operation("orders-service", fixedOperation(r.Operation), started, err != nil)
+	responsePayload := observe.Payload(ctx, "response", result)
+	observe.Log(ctx, s.logger, "shop request", "operation", fixedOperation(r.Operation), "method", "Shop", "status", status, "duration_ms", time.Since(started).Milliseconds(), "request", requestPayload, "response", responsePayload)
 	result["demo"] = true
 	result["trace_id"] = trace.SpanContextFromContext(ctx).TraceID().String()
 	data, _ := json.Marshal(result)
@@ -145,7 +157,10 @@ func number(m map[string]json.RawMessage, key string) int64 {
 }
 func valid(s string) bool { return s != "" && len(s) <= 300 }
 func (b *business) command(ctx context.Context, r *api.ShopRequest, role string) (map[string]any, error) {
+	validationCtx, validationSpan := otel.Tracer("orders-service").Start(ctx, "validation")
+	_ = validationCtx
 	m, e := parseBody(r.BodyJson)
+	validationSpan.End()
 	if e != nil {
 		return nil, e
 	}
@@ -153,6 +168,23 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 	op := r.Operation
 	if len(r.Id) > 128 {
 		return nil, bad("INVALID_ID")
+	}
+	if r.Operation == "orders.pay" || r.Operation == "orders.cancel" {
+		switch text(m, "scenario") {
+		case "", "success", "error", "delay", "timeout":
+		default:
+			return nil, bad("INVALID_SCENARIO")
+		}
+	}
+	if r.Operation == "orders.cancel" {
+		if e = b.prepareCancel(ctx, r, role); e != nil {
+			return nil, e
+		}
+	}
+	if r.Operation == "orders.pay" {
+		if e = b.preparePayment(ctx, r, role); e != nil {
+			return nil, e
+		}
 	}
 	tx, e := b.db.Begin(ctx)
 	if e != nil {
@@ -377,14 +409,37 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 			return nil, forbidden()
 		}
 		state := o["status"].(string)
+		if state == "RESERVED" && !o["expires_at"].(time.Time).After(time.Now()) {
+			if e = b.releaseExpired(ctx, tx, r.Id); e != nil {
+				return nil, e
+			}
+			state = "EXPIRED"
+			if op != "orders.get" {
+				if e = tx.Commit(ctx); e != nil {
+					return nil, e
+				}
+				return nil, problem{409, "RESERVATION_EXPIRED"}
+			}
+		}
+		if op == "orders.pay" {
+			pending, e := records(ctx, tx, "SELECT order_id FROM business_refund_attempts WHERE order_id=$1", r.Id)
+			if e != nil {
+				return nil, e
+			}
+			if len(pending) > 0 {
+				return nil, problem{409, "CANCELLATION_PENDING"}
+			}
+		}
 		if op == "orders.pay" && state != "PAID" {
 			if state != "RESERVED" {
 				return nil, problem{409, "INVALID_STATE"}
 			}
-			if e = b.mock(ctx, "/mock/payments", text(m, "scenario")); e != nil {
+			paymentID, payErr := b.payment(ctx, "payments", r.Id, o["total_cents"].(int64), text(m, "scenario"))
+			if payErr != nil {
+				e = payErr
 				return nil, e
 			}
-			if _, e = tx.Exec(ctx, "UPDATE business_orders SET status='PAID' WHERE id=$1", r.Id); e != nil {
+			if _, e = tx.Exec(ctx, "UPDATE business_orders SET status='PAID',payment_id=$2 WHERE id=$1", r.Id, paymentID); e != nil {
 				return nil, e
 			}
 			items, e := records(ctx, tx, "SELECT * FROM business_items WHERE order_id=$1 ORDER BY offer_id", r.Id)
@@ -413,8 +468,40 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 			if len(used) > 0 {
 				return nil, problem{409, "TICKET_ALREADY_REDEEMED"}
 			}
+			if state == "RESERVED" {
+				if e = b.cancelUncertain(ctx, tx, r.Id); e != nil {
+					return nil, e
+				}
+			}
 			if state == "PAID" {
-				if e = b.mock(ctx, "/mock/refunds", text(m, "scenario")); e != nil {
+				var refundID string
+				var refundErr error
+				if legacy, _ := o["legacy_fixture_payment"].(bool); legacy && o["payment_id"] == nil {
+					refundID, refundErr = b.legacyRefund(ctx, r.Id, text(m, "scenario"))
+				} else {
+					refundID, refundErr = b.payment(ctx, "refunds", r.Id, o["total_cents"].(int64), text(m, "scenario"))
+				}
+				if refundErr != nil {
+					var decline problem
+					if errors.As(refundErr, &decline) && decline.code == "MOCK_DECLINED" {
+						// Only a first definite decline can restore ticket usability. A previous
+						// uncertain request may still arrive late, so later declines retain the fence.
+						pending, lookupErr := records(ctx, tx, "SELECT attempt_count FROM business_refund_attempts WHERE order_id=$1", r.Id)
+						if lookupErr != nil {
+							return nil, lookupErr
+						}
+						if len(pending) == 1 && pending[0]["attempt_count"].(int64) == 1 {
+							if _, clearErr := tx.Exec(ctx, "DELETE FROM business_refund_attempts WHERE order_id=$1", r.Id); clearErr != nil {
+								return nil, clearErr
+							}
+							if commitErr := tx.Commit(ctx); commitErr != nil {
+								return nil, commitErr
+							}
+						}
+					}
+					return nil, refundErr
+				}
+				if _, e = tx.Exec(ctx, "UPDATE business_orders SET refund_id=$2 WHERE id=$1", r.Id, refundID); e != nil {
 					return nil, e
 				}
 			}
@@ -454,6 +541,13 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 		if e != nil {
 			return nil, e
 		}
+		pending, e := records(ctx, tx, "SELECT order_id FROM business_refund_attempts WHERE order_id=$1", t["order_id"])
+		if e != nil {
+			return nil, e
+		}
+		if len(pending) > 0 {
+			return nil, problem{409, "REFUND_PENDING"}
+		}
 		t, e = one(ctx, tx, "SELECT * FROM business_tickets WHERE code=$1 FOR UPDATE", r.Id)
 		if e != nil {
 			return nil, e
@@ -489,7 +583,10 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 	default:
 		return nil, problem{404, "UNKNOWN_OPERATION"}
 	}
-	if e = tx.Commit(ctx); e != nil {
+	commitCtx, commitSpan := otel.Tracer("orders-service").Start(ctx, "transaction.commit")
+	e = tx.Commit(commitCtx)
+	commitSpan.End()
+	if e != nil {
 		return nil, e
 	}
 	return result, nil
@@ -534,6 +631,8 @@ func (b *business) mock(ctx context.Context, path, scenario string) error {
 	return nil
 }
 func (b *business) event(ctx context.Context, tx pgx.Tx, kind, id string) error {
+	ctx, span := otel.Tracer("orders-service").Start(ctx, "outbox.enqueue")
+	defer span.End()
 	eventID := uuid.NewString()
 	data, _ := json.Marshal(map[string]any{"schema_version": 1, "demo": true, "event_id": eventID, "event_type": kind, "order_id": id, "occurred_at": time.Now().UTC().Format(time.RFC3339Nano)})
 	headers := propagation.MapCarrier{}
@@ -544,8 +643,11 @@ func (b *business) event(ctx context.Context, tx pgx.Tx, kind, id string) error 
 }
 func (b *business) outbox(ctx context.Context) {
 	for ctx.Err() == nil {
+		if e := b.expire(ctx); e != nil {
+			slog.Error("reservation expiry retry")
+		}
 		if e := b.flush(ctx); e != nil {
-			slog.Error("business outbox retry", "error", e)
+			slog.Error("business outbox retry")
 		}
 		select {
 		case <-ctx.Done():
@@ -573,7 +675,7 @@ func (b *business) flush(ctx context.Context) error {
 		}
 		carrier := propagation.MapCarrier(h)
 		sendCtx := otel.GetTextMapPropagator().Extract(ctx, carrier)
-		sendCtx, span := otel.Tracer("order-service").Start(sendCtx, "publish business event", trace.WithSpanKind(trace.SpanKindProducer))
+		sendCtx, span := otel.Tracer("order-service").Start(sendCtx, "outbox.publish", trace.WithSpanKind(trace.SpanKindProducer))
 		e = b.writer.WriteMessages(sendCtx, kafka.Message{Key: []byte(r["event_id"].(string)), Value: []byte(r["payload"].(string)), Headers: headers})
 		span.End()
 		if e != nil {
@@ -598,7 +700,7 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, e = tx.Exec(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations(version int PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())"); e != nil {
 		return e
 	}
-	for i, sql := range []string{migration, businessMigration} {
+	for i, sql := range []string{migration, businessMigration, expiryMigration, paymentIntentMigration, refundIntentMigration, legacyPaidMigration} {
 		var exists bool
 		if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1)", i+1).Scan(&exists); e != nil {
 			return e
