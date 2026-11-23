@@ -47,7 +47,12 @@ func businessDB(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if url == "" {
 		return nil, fmt.Errorf("DATABASE_URL required")
 	}
-	p, e := pgxpool.New(ctx, url)
+	config, e := pgxpool.ParseConfig(url)
+	if e != nil {
+		return nil, e
+	}
+	config.ConnConfig.Tracer = QueryTracer{}
+	p, e := pgxpool.NewWithConfig(ctx, config)
 	if e != nil {
 		return nil, e
 	}
@@ -75,7 +80,8 @@ func (n *notifier) businessDeliver(ctx context.Context, p *pgxpool.Pool, msg kaf
 		carrier[h.Key] = string(h.Value)
 	}
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
-	ctx, span := otel.Tracer("notification").Start(ctx, "business event consume", trace.WithSpanKind(trace.SpanKindConsumer))
+	ctx, span := otel.Tracer("notification").Start(ctx, "business event consume", trace.WithSpanKind(trace.SpanKindConsumer), trace.WithAttributes(
+		attribute.String("messaging.system", "kafka"), attribute.String("messaging.destination.name", msg.Topic), attribute.String("messaging.operation.name", "process")))
 	started := time.Now()
 	defer func() {
 		outcome := "success"
@@ -98,6 +104,7 @@ func (n *notifier) businessDeliver(ctx context.Context, p *pgxpool.Pool, msg kaf
 		}
 		return err
 	}
+	span.SetAttributes(attribute.String("messaging.message.type", e.EventType))
 	tx, err := p.Begin(ctx)
 	if err != nil {
 		return err

@@ -38,7 +38,12 @@ type result struct {
 type server struct{ db *pgxpool.Pool }
 
 func database(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	p, e := pgxpool.New(ctx, url)
+	config, e := pgxpool.ParseConfig(url)
+	if e != nil {
+		return nil, e
+	}
+	config.ConnConfig.Tracer = QueryTracer{}
+	p, e := pgxpool.NewWithConfig(ctx, config)
 	if e != nil {
 		return nil, e
 	}

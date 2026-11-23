@@ -85,6 +85,7 @@ func (t *telemetry) wrap(route string, h http.HandlerFunc) http.HandlerFunc {
 		defer span.End()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		h(sw, r.WithContext(ctx))
+		span.SetAttributes(attribute.String("server.address", "payment-mock"), attribute.String("http.request.method", method), attribute.String("http.route", route), attribute.Int("http.response.status_code", sw.status))
 		if sw.status >= 400 {
 			span.SetStatus(codes.Error, http.StatusText(sw.status))
 		}

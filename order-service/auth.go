@@ -34,7 +34,7 @@ func (s *orderServer) resolveActor(ctx context.Context, r *api.ShopRequest) (str
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))
 	client := s.httpClient
 	if client == nil {
-		client = &http.Client{Timeout: time.Second}
+		client = &http.Client{Timeout: time.Second, Transport: observe.HTTPTransport{}}
 	}
 	res, e := client.Do(request)
 	if e != nil {

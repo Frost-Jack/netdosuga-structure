@@ -86,7 +86,7 @@ func (g *gateway) auth(operation string) http.HandlerFunc {
 			request.Header.Set("Authorization", "Bearer "+cookie.Value)
 		}
 		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))
-		response, err := (&http.Client{Timeout: 4 * time.Second}).Do(request)
+		response, err := (&http.Client{Timeout: 4 * time.Second, Transport: observe.HTTPTransport{}}).Do(request)
 		if err != nil {
 			fail(502, "Сервис входа временно недоступен")
 			return

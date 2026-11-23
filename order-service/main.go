@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -97,7 +97,7 @@ func (s *orderServer) CreateDemoOrder(ctx context.Context, in *api.CreateDemoOrd
 		if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkError) && networkError.Timeout() {
 			code = codes.DeadlineExceeded
 		}
-		return fail(code, "mock payment unavailable", err)
+		return fail(code, "mock payment unavailable", errors.New("HTTP transport failed"))
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -217,7 +217,7 @@ func run() error {
 	mockURL := strings.TrimRight(observe.Env("MOCK_BASE_URL", "http://integration-mock:8083"), "/")
 	writer := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: topic, Balancer: &kafka.LeastBytes{}, RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: true, Async: false, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
 	defer writer.Close()
-	client := &http.Client{Timeout: timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	client := &http.Client{Timeout: timeout, Transport: observe.HTTPTransport{}}
 	ready := func(c context.Context) error {
 		if err := observe.Writable(c, pool); err != nil {
 			return err

@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"example.com/netdosuga/gateway/internal/observe"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"log/slog"
 	"math"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -80,6 +82,8 @@ func safePayload(value any) string {
 func (g *gateway) recordShop(ctx context.Context, operation, method, route string, status int, started time.Time, request, response map[string]any) {
 	req, res := safePayload(request), safePayload(response)
 	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(attribute.String("server.address", "api-gateway"))
+	observe.HTTPAttributes(span, method, strings.TrimPrefix(route, method+" "), status)
 	span.SetAttributes(attribute.String("app.request", req), attribute.String("app.response", res), attribute.String("app.operation", operation))
 	logger := g.logger
 	if logger == nil {

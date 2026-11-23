@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"io"
@@ -669,14 +671,23 @@ func (b *business) flush(ctx context.Context) error {
 	for _, r := range rows {
 		var h map[string]string
 		json.Unmarshal([]byte(r["headers"].(string)), &h)
-		headers := []kafka.Header{}
-		for k, v := range h {
-			headers = append(headers, kafka.Header{Key: k, Value: []byte(v)})
-		}
 		carrier := propagation.MapCarrier(h)
 		sendCtx := otel.GetTextMapPropagator().Extract(ctx, carrier)
-		sendCtx, span := otel.Tracer("order-service").Start(sendCtx, "outbox.publish", trace.WithSpanKind(trace.SpanKindProducer))
-		e = b.writer.WriteMessages(sendCtx, kafka.Message{Key: []byte(r["event_id"].(string)), Value: []byte(r["payload"].(string)), Headers: headers})
+		sendCtx, span := otel.Tracer("order-service").Start(sendCtx, "outbox.publish", trace.WithSpanKind(trace.SpanKindProducer), trace.WithAttributes(
+			attribute.String("messaging.system", "kafka"), attribute.String("messaging.destination.name", b.writer.Topic), attribute.String("messaging.operation.name", "publish")))
+		var event struct {
+			Type string `json:"event_type"`
+		}
+		if json.Unmarshal([]byte(r["payload"].(string)), &event) == nil {
+			switch event.Type {
+			case "order.created", "order.paid", "order.cancelled", "order.expired", "ticket.redeemed":
+				span.SetAttributes(attribute.String("messaging.message.type", event.Type))
+			}
+		}
+		e = b.writer.WriteMessages(sendCtx, kafka.Message{Key: []byte(r["event_id"].(string)), Value: []byte(r["payload"].(string)), Headers: outboxTraceHeaders(sendCtx)})
+		if e != nil {
+			span.SetStatus(codes.Error, "Kafka publish failed")
+		}
 		span.End()
 		if e != nil {
 			return e
@@ -686,6 +697,17 @@ func (b *business) flush(ctx context.Context) error {
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// Inject after starting outbox.publish so the consumer is its descendant.
+func outboxTraceHeaders(ctx context.Context) []kafka.Header {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	headers := []kafka.Header{}
+	for k, v := range carrier {
+		headers = append(headers, kafka.Header{Key: k, Value: []byte(v)})
+	}
+	return headers
 }
 
 func migrate(ctx context.Context, pool *pgxpool.Pool) error {

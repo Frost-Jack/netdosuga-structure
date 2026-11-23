@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -51,8 +52,7 @@ func (n *notifier) deliver(ctx context.Context, msg kafka.Message) error {
 	defer span.End()
 	err := n.send(ctx, msg.Value)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		span.SetStatus(codes.Error, "notification delivery failed")
 		n.events.WithLabelValues("error").Inc()
 		sc := trace.SpanContextFromContext(ctx)
 		slog.Error("mock notification failed", "trace_id", sc.TraceID().String(), "span_id", sc.SpanID().String(), "error", err)
@@ -73,10 +73,13 @@ func (n *notifier) send(ctx context.Context, data []byte) error {
 	ctx, span := otel.Tracer("notification").Start(ctx, "POST /mock/emails", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
 	req, _ := http.NewRequestWithContext(ctx, "POST", n.base+"/mock/emails", bytes.NewReader(body))
+	span.SetAttributes(attribute.String("server.address", req.URL.Hostname()))
+	HTTPAttributes(span, req.Method, "/mock/emails", 0)
 	req.Header.Set("Content-Type", "application/json")
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := n.client.Do(req)
 	if err == nil {
+		HTTPAttributes(span, req.Method, "/mock/emails", resp.StatusCode)
 		defer resp.Body.Close()
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		if resp.StatusCode != 200 {
@@ -84,8 +87,7 @@ func (n *notifier) send(ctx context.Context, data []byte) error {
 		}
 	}
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		span.SetStatus(codes.Error, "notification delivery failed")
 	}
 	return err
 }
@@ -182,7 +184,7 @@ func run() error {
 	t := newTelemetry("notification-worker")
 	events := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "netdosuga_events_total", ConstLabels: prometheus.Labels{"service": "notification-worker"}}, []string{"outcome"})
 	t.registry.MustRegister(events)
-	n := &notifier{client: &http.Client{Timeout: time.Second}, base: base, events: events}
+	n := &notifier{client: &http.Client{Timeout: time.Second, Transport: HTTPTransport{}}, base: base, events: events}
 	reader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: env("KAFKA_GROUP_ID", "netdosuga-demo-notification-v1"), StartOffset: kafka.FirstOffset, CommitInterval: 0, WatchPartitionChanges: true, PartitionWatchInterval: time.Second, MaxWait: 500 * time.Millisecond, Dialer: &kafka.Dialer{Timeout: time.Second}})
 	businessReader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: businessTopic, GroupID: "netdosuga-business-notification-v1", StartOffset: kafka.FirstOffset, CommitInterval: 0, WatchPartitionChanges: true, PartitionWatchInterval: time.Second, MaxWait: 500 * time.Millisecond})
 	defer businessReader.Close()

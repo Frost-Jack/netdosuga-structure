@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -35,9 +36,13 @@ func (g *gateway) create(w http.ResponseWriter, r *http.Request) {
 	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 	ctx, span := otel.Tracer("gateway").Start(ctx, "POST /api/v1/demo/orders", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
+	span.SetAttributes(attribute.String("server.address", "api-gateway"))
+	responseStatus := 200
+	defer func() { observe.HTTPAttributes(span, r.Method, "/api/v1/demo/orders", responseStatus) }()
 	traceID := span.SpanContext().TraceID().String()
 	w.Header().Set("Content-Type", "application/json")
 	fail := func(httpCode int, code, message string) {
+		responseStatus = httpCode
 		observe.Error(ctx, errors.New(message))
 		sc := trace.SpanContextFromContext(ctx)
 		g.logger.Log(ctx, slog.LevelError, "demo request failed", "code", code, "trace_id", sc.TraceID().String(), "span_id", sc.SpanID().String())

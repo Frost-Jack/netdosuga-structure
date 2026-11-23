@@ -107,6 +107,7 @@ func (t *telemetry) wrap(route string, h http.HandlerFunc) http.HandlerFunc {
 		}
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		h(sw, r.WithContext(ctx))
+		span.SetAttributes(attribute.String("server.address", "notification-service"), attribute.String("http.request.method", method), attribute.String("http.route", route), attribute.Int("http.response.status_code", sw.status))
 		var response any
 		json.Unmarshal(sw.body.Bytes(), &response)
 		requestJSON, _ := diagnosticPayload(payload)

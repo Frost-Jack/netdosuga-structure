@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"go.opentelemetry.io/otel"
 	"golang.org/x/crypto/bcrypt"
 	"io"
@@ -301,7 +301,7 @@ func run() error {
 		}
 		mux.Handle(route, metrics.Wrap(path, observe.AuthDiagnostic(path, handler)))
 	}
-	srv := &http.Server{Addr: observe.Env("HTTP_ADDR", ":8084"), Handler: otelhttp.NewHandler(mux, "identity.http"), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{Addr: observe.Env("HTTP_ADDR", ":8084"), Handler: observe.HTTPHandler(mux, "identity.http"), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		<-ctx.Done()
 		c, stop := context.WithTimeout(context.Background(), 5*time.Second)
