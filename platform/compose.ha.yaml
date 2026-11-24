@@ -69,6 +69,7 @@ services:
     logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
     healthcheck:
       <<: *app-health
+      timeout: 15s
       test: [CMD-SHELL, '/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1']
   jaeger:
     image: jaegertracing/all-in-one:1.76.0
@@ -162,6 +163,32 @@ services:
     healthcheck:
       <<: *app-health
       test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8081/readyz']
+  commerce-service:
+    image: netdosuga/commerce-service:sprint1
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: commerce-service/Dockerfile
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: orders-service
+      ConnectionStrings__Commerce: Host=postgres;Port=5432;Database=demo;Username=demo;Password=${POSTGRES_PASSWORD:-demo12345}
+      KAFKA_BROKERS: kafka:9092
+      BUSINESS_KAFKA_TOPIC: netdosuga.business.events.v1
+      IDENTITY_BASE_URL: http://identity-service:8084
+      PAYMENT_BASE_URL: http://payment-mock:8085
+      COMMERCE_INTERNAL_TOKEN: ${COMMERCE_INTERNAL_TOKEN:-local-commerce-token}
+      PRICING_GRPC_ADDR: ${PRICING_GRPC_ADDR:-}
+    depends_on:
+      postgres-router: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      jaeger: {condition: service_healthy}
+      identity-service: {condition: service_healthy}
+      payment-mock: {condition: service_healthy}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    healthcheck:
+      <<: *app-health
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8087/readyz']
   notification-service:
     image: netdosuga/notification-service:sprint1
     pull_policy: build
@@ -195,10 +222,15 @@ services:
       INSTANCE_ID: api-gateway-a
       OTEL_SERVICE_NAME: api-gateway
       IDENTITY_BASE_URL: http://identity-service:8084
-      ORDER_GRPC_ADDR: order-service:50051
-      ORDER_GRPC_TIMEOUT: 3s
+      ORDER_GRPC_ADDR: commerce-service:50051
+      DEMO_ORDER_GRPC_ADDR: order-service:50051
+      ORDER_GRPC_TIMEOUT: 5s
+      COMMERCE_BASE_URL: http://commerce-service:8087
+      COMMERCE_INTERNAL_TOKEN: ${COMMERCE_INTERNAL_TOKEN:-local-commerce-token}
+      PHOTO_DIR: /photos
+    volumes: [photos-data:/photos]
     depends_on:
-      grpc-router: {condition: service_healthy}
+      commerce-service: {condition: service_healthy}
     logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
     healthcheck:
       <<: *app-health
@@ -213,10 +245,15 @@ services:
       INSTANCE_ID: api-gateway-b
       OTEL_SERVICE_NAME: api-gateway
       IDENTITY_BASE_URL: http://identity-service:8084
-      ORDER_GRPC_ADDR: order-service:50051
-      ORDER_GRPC_TIMEOUT: 3s
+      ORDER_GRPC_ADDR: commerce-service:50051
+      DEMO_ORDER_GRPC_ADDR: order-service:50051
+      ORDER_GRPC_TIMEOUT: 5s
+      COMMERCE_BASE_URL: http://commerce-service:8087
+      COMMERCE_INTERNAL_TOKEN: ${COMMERCE_INTERNAL_TOKEN:-local-commerce-token}
+      PHOTO_DIR: /photos
+    volumes: [photos-data:/photos]
     depends_on:
-      grpc-router: {condition: service_healthy}
+      commerce-service: {condition: service_healthy}
     logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
     healthcheck:
       <<: *app-health
@@ -319,4 +356,5 @@ volumes:
   kafka-data:
   prometheus-data:
   grafana-data:
+  photos-data:
 
