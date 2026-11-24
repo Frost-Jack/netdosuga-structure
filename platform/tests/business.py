@@ -18,13 +18,13 @@ def call(method,path,body=None,actor='customer-demo',key=None,expected=(200,201)
 
 def check(name): REPORT['checks'].append({'name':name,'passed':True})
 def offer(vendor,capacity=2):
-    app=call('POST','/applications',{'organization':'E2E '+uuid.uuid4().hex[:8],'title':'E2E offer','city':'Moscow','category':'test'},vendor)['application']
+    app=call('POST','/applications',{'organization':'E2E '+uuid.uuid4().hex[:8],'title':'E2E offer','city':'Moscow','category':'test','inn':'7701234567','ogrn':'1027700132195','address':'Moscow, Test st. 1','contact_person':'Test Person','bik':'044525225','account':'40702810900000000001'},vendor)['application']
     call('POST',f"/applications/{app['id']}/approve",{},vendor,expected=(403,))
     value=call('POST',f"/applications/{app['id']}/approve",{},'admin-demo')['offer']
     oid=value['id']
     assert oid not in [o['id'] for o in call('GET','/catalog')['offers']]
     call('POST',f'/offers/{oid}/publish',{},vendor,expected=(400,))
-    call('PATCH',f'/offers/{oid}',{'title':'E2E offer','description':'Demonstration','city':'Moscow','category':'test','price_cents':10000,'capacity':capacity},vendor)
+    call('PATCH',f'/offers/{oid}',{'title':'E2E offer','description':'Demonstration','city':'Moscow','category':'test','schedule':'Ежедневно 10:00-18:00','price_cents':10000,'capacity':capacity},vendor)
     call('POST',f'/offers/{oid}/publish',{},vendor)
     return oid
 
@@ -89,6 +89,9 @@ def run():
     assert all(len(d['trace_id'])==32 for d in matched),matched
     check('business_outbox_to_mock_email_with_trace')
     REPORT['deliveries']=matched
+    detail=call('GET','/offers/'+a)['offer']
+    assert detail['schedule']=='Ежедневно 10:00-18:00' and 'current_price_cents' in detail and 'rating' in detail,detail
+    check('offer_card_schedule_price_rating')
     REPORT['order_ids']=[oid,second];REPORT['offer_ids']=[a,b]
 try:
     run();REPORT['passed']=True
