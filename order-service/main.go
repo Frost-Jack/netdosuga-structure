@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,24 +33,6 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
-
-//go:embed migrations/001_demo_receipts.sql
-var migration string
-
-//go:embed migrations/002_business.sql
-var businessMigration string
-
-//go:embed migrations/003_sessions_payments_expiry.sql
-var expiryMigration string
-
-//go:embed migrations/004_payment_intents.sql
-var paymentIntentMigration string
-
-//go:embed migrations/005_refund_intents.sql
-var refundIntentMigration string
-
-//go:embed migrations/006_legacy_paid_fixture.sql
-var legacyPaidMigration string
 
 type orderServer struct {
 	api.UnimplementedOrderServiceServer
