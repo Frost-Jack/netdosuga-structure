@@ -734,24 +734,28 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "organization": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "type": "string"
-                  },
-                  "city": {
-                    "type": "string"
-                  },
-                  "category": {
-                    "type": "string"
-                  }
+                  "organization": { "type": "string" },
+                  "title": { "type": "string" },
+                  "city": { "type": "string" },
+                  "category": { "type": "string" },
+                  "inn": { "type": "string" },
+                  "ogrn": { "type": "string" },
+                  "address": { "type": "string" },
+                  "contact_person": { "type": "string" },
+                  "bik": { "type": "string" },
+                  "account": { "type": "string" }
                 },
                 "required": [
                   "organization",
                   "title",
                   "city",
-                  "category"
+                  "category",
+                  "inn",
+                  "ogrn",
+                  "address",
+                  "contact_person",
+                  "bik",
+                  "account"
                 ]
               }
             }
@@ -1421,6 +1425,28 @@
       }
     },
     "/api/v1/shop/offers/{id}": {
+      "get": {
+        "operationId": "offers_get",
+        "summary": "offers.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation completed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OfferResult" }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "operationId": "offers_update",
         "summary": "offers.update",
@@ -1669,6 +1695,33 @@
             "session": []
           }
         ]
+      }
+    },
+    "/api/v1/shop/offers/{id}/unpublish": {
+      "post": {
+        "operationId": "offers_unpublish",
+        "summary": "offers.unpublish",
+        "parameters": [{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+        "responses": {"200":{"description":"Operation completed","content":{"application/json":{"schema":{"$ref":"#/components/schemas/OfferResult"}}}}},
+        "security": [{"session": []}]
+      }
+    },
+    "/api/v1/shop/offers/{id}/photo": {
+      "post": {
+        "operationId": "offers_photo_upload",
+        "summary": "offers.photo.upload",
+        "parameters": [{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+        "requestBody": {"required": true, "content": {"multipart/form-data": {"schema": {"type":"object","properties":{"photo":{"type":"string","format":"binary"}},"required":["photo"]}}}},
+        "responses": {"200":{"description":"Photo uploaded","content":{"application/json":{"schema":{"type":"object","properties":{"demo":{"type":"boolean"},"trace_id":{"type":"string"},"photo_path":{"type":"string"}},"required":["demo","trace_id","photo_path"]}}}}},
+        "security": [{"session": []}]
+      }
+    },
+    "/api/v1/shop/admin/vendors": {
+      "get": {
+        "operationId": "admin_vendors",
+        "summary": "admin.vendors",
+        "responses": {"200":{"description":"Operation completed","content":{"application/json":{"schema":{"type":"object","properties":{"demo":{"type":"boolean"},"trace_id":{"type":"string"},"vendors":{"type":"array","items":{"type":"object"}}},"required":["demo","trace_id"]}}}}},
+        "security": [{"session": []}]
       }
     },
     "/api/v1/shop/offers/{id}/publish": {
@@ -4322,7 +4375,13 @@
           },
           "reason": {
             "type": "string"
-          }
+          },
+          "inn": { "type": "string" },
+          "ogrn": { "type": "string" },
+          "address": { "type": "string" },
+          "contact_person": { "type": "string" },
+          "bik": { "type": "string" },
+          "account": { "type": "string" }
         },
         "required": []
       },
@@ -4364,6 +4423,16 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "schedule": { "type": "string" },
+          "photo_path": { "type": "string" },
+          "current_price_cents": { "type": "integer", "format": "int64", "minimum": 0 },
+          "rating": {
+            "type": "object",
+            "properties": {
+              "average": { "type": "number" },
+              "reviews_count": { "type": "integer", "format": "int64", "minimum": 0 }
+            }
           }
         },
         "required": []
