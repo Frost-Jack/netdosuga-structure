@@ -117,17 +117,20 @@ func TestShopErrors(t *testing.T) {
 }
 
 func TestEmbeddedUI(t *testing.T) {
-	for _, name := range []string{"web/index.html", "web/app.js", "web/style.css"} {
+	for _, name := range []string{"web/index.html", "web/app.js", "web/catalog.js", "web/admin.js", "web/style.css"} {
 		data, err := webFiles.ReadFile(name)
 		if err != nil || len(data) == 0 {
 			t.Fatalf("asset %s: %v", name, err)
 		}
 	}
-	script, _ := webFiles.ReadFile("web/app.js")
-	if strings.Contains(string(script), "innerHTML") {
-		t.Fatal("user-controlled business fields must use textContent")
+	appScript, _ := webFiles.ReadFile("web/app.js")
+	for _, name := range []string{"web/app.js", "web/catalog.js", "web/admin.js"} {
+		script, _ := webFiles.ReadFile(name)
+		if strings.Contains(string(script), "innerHTML") {
+			t.Fatalf("user-controlled business fields must use textContent in %s", name)
+		}
 	}
-	if !strings.Contains(string(script), `order.status === "RESERVED"`) {
+	if !strings.Contains(string(appScript), `order.status === "RESERVED"`) {
 		t.Fatal("payment must be available for reserved orders")
 	}
 }

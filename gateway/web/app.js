@@ -91,6 +91,10 @@ function userError(data, status, path) {
     INVALID_SCENARIO: "Выберите доступный сценарий тестовой оплаты.",
     REQUIRED_FIELDS: "Заполните все обязательные поля.",
     REASON_REQUIRED: "Укажите причину отклонения заявки.",
+    INVALID_INN: "Укажите ИНН: 10 или 12 цифр.",
+    INVALID_OGRN: "Укажите ОГРН: 13 или 15 цифр.",
+    INVALID_BIK: "Укажите БИК: 9 цифр.",
+    INVALID_ACCOUNT: "Укажите расчётный счёт: 20 цифр.",
     INCOMPLETE_OFFER:
       "Заполните название, описание, город, категорию, цену и количество билетов перед публикацией.",
     INVALID_AMOUNT_OR_CAPACITY:
@@ -207,7 +211,7 @@ function permittedViews() {
       ? ["catalog", "cart", "orders"]
       : user.role === "vendor"
         ? ["catalog", "applications", "offers", "sales"]
-        : ["catalog", "applications", "offers", "orders", "sales"];
+        : ["catalog", "applications", "offers", "orders", "sales", "admin"];
 }
 async function load() {
   const permitted = permittedViews();
@@ -222,6 +226,7 @@ async function load() {
     applications: "Заявки вендоров",
     offers: "Предложения",
     sales: "Продажи",
+    admin: "Панель администратора",
   }[view];
   document
     .querySelectorAll("[data-view]")
@@ -239,46 +244,14 @@ async function load() {
       : "";
   $("content").className = view;
   $("content").replaceChildren(node("p", "Загружаем…", "muted"));
+  if (view === "admin") {
+    await renderAdmin();
+    return;
+  }
   const data = await api(view + query);
   $("content").replaceChildren();
   if (view === "catalog") {
-    for (const offer of data.offers || []) {
-      const r = row(
-        offer.title,
-        offer.city + " · " + offer.category + " · доступно " + offer.available,
-      );
-      r.info.append(
-        node("p", offer.description),
-        node("div", money(offer.price_cents), "price"),
-      );
-      const qty = node("input");
-      qty.type = "number";
-      qty.min = 1;
-      qty.max = Math.min(20, Number(offer.available || 0));
-      qty.value = 1;
-      qty.setAttribute("aria-label", "Количество для " + offer.title);
-      if (user && user.role !== "customer") {
-        r.actions.append(
-          node("p", "Для покупки войдите как покупатель.", "muted"),
-        );
-        continue;
-      }
-      if (Number(offer.available) <= 0) {
-        r.actions.append(node("p", "Все билеты разобрали", "muted"));
-        continue;
-      }
-      r.actions.append(
-        qty,
-        button(user ? "В корзину" : "Войти и купить", () =>
-          user
-            ? mutate("cart/items", "POST", {
-                offer_id: offer.id,
-                quantity: Number(qty.value),
-              })
-            : showAuth(),
-        ),
-      );
-    }
+    renderCatalog(data);
   }
   if (view === "cart") {
     const cart = data.cart || {};
@@ -399,6 +372,12 @@ async function load() {
           " · " +
           statusText(app.status),
       );
+      r.info.append(
+        node("p", "ИНН: " + (app.inn || "—") + " · ОГРН: " + (app.ogrn || "—")),
+        node("p", "Адрес: " + (app.address || "—")),
+        node("p", "Контакт: " + (app.contact_person || "—")),
+        node("p", "БИК: " + (app.bik || "—") + " · Счёт: " + (app.account || "—")),
+      );
       if (user?.role === "admin" && app.status === "PENDING") {
         r.actions.append(
           button("Одобрить", () =>
@@ -439,13 +418,14 @@ async function load() {
           " / " +
           offer.capacity,
       );
-      if (user?.role !== "vendor") continue;
+      if (user?.role !== "vendor" && user?.role !== "admin") continue;
       const form = node("form", undefined, "edit");
       for (const [name, label, type] of [
         ["title", "Название", "text"],
         ["description", "Описание", "text"],
         ["city", "Город", "text"],
         ["category", "Категория", "text"],
+        ["schedule", "Расписание", "text"],
         ["price_cents", "Цена, ₽", "number"],
         ["capacity", "Ёмкость", "number"],
       ]) {
@@ -458,7 +438,7 @@ async function load() {
             ? Number(offer[name] || 0) / 100
             : (offer[name] ?? "");
         if (name === "price_cents") input.step = "0.01";
-        input.required = true;
+        input.required = name !== "schedule";
         if (type === "number") input.min = 1;
         l.append(input);
         form.append(l);
@@ -480,6 +460,20 @@ async function load() {
           mutate("offers/" + idpath(offer.id) + "/publish"),
         ),
       );
+      const photo = node("input");
+      photo.type = "file";
+      photo.accept = "image/jpeg,image/png";
+      photo.setAttribute("aria-label", "Фото для " + offer.title);
+      r.info.append(photo);
+      r.actions.append(
+        button("Загрузить фото", () => uploadOfferPhoto(offer.id, photo)),
+      );
+      if (offer.status === "PUBLISHED" && user?.role === "admin")
+        r.actions.append(
+          button("Снять с продажи", () =>
+            mutate("offers/" + idpath(offer.id) + "/unpublish"),
+          ),
+        );
     }
   }
   if (view === "sales") {

@@ -24,6 +24,7 @@ type businessEvent struct {
 	EventID       string `json:"event_id"`
 	EventType     string `json:"event_type"`
 	OrderID       string `json:"order_id"`
+	AggregateID   string `json:"aggregate_id"`
 	OccurredAt    string `json:"occurred_at"`
 }
 
@@ -38,7 +39,7 @@ func parseBusiness(data []byte) (businessEvent, error) {
 		return e, err
 	}
 	switch e.EventType {
-	case "order.created", "order.paid", "order.cancelled", "order.expired", "ticket.redeemed":
+	case "order.created", "order.paid", "order.cancelled", "order.expired", "ticket.redeemed", "application.approved", "application.rejected":
 		return e, nil
 	}
 	return e, fmt.Errorf("unknown event")

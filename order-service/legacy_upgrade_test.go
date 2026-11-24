@@ -41,7 +41,15 @@ func TestLegacyPaidUpgrade(t *testing.T) {
 	}
 	defer p.Close()
 	// Install exactly the original schema and paid records before the MVP migrations exist.
-	if _, e = p.Exec(ctx, migration+businessMigration+`CREATE TABLE schema_migrations(version int PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now()); INSERT INTO schema_migrations(version) VALUES(1),(2);`); e != nil {
+	firstMigration, e := migrationSQL("001_demo_receipts.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	secondMigration, e := migrationSQL("002_business.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = p.Exec(ctx, firstMigration+secondMigration+`CREATE TABLE schema_migrations(version int PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now()); INSERT INTO schema_migrations(version) VALUES(1),(2);`); e != nil {
 		t.Fatal(e)
 	}
 	for _, id := range []string{"old-valid", "old-used", "old-uncertain"} {

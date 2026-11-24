@@ -6,7 +6,7 @@ services:
     command: [python, run.py]
     environment:
       GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-demo12345}
-      EXPECTED_PROM_TARGETS: ${EXPECTED_PROM_TARGETS:-8}
+      EXPECTED_PROM_TARGETS: ${EXPECTED_PROM_TARGETS:-9}
       MVP_SEED_PASSWORD: ${MVP_SEED_PASSWORD:-demo12345}
     volumes:
       - ./tests:/tests:ro

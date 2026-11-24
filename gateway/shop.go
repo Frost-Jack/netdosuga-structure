@@ -29,8 +29,11 @@ var shopRoutes = map[string]string{
 	"POST /api/v1/shop/applications/{id}/approve": "applications.approve",
 	"POST /api/v1/shop/applications/{id}/reject":  "applications.reject",
 	"GET /api/v1/shop/offers":                     "offers.list",
+	"GET /api/v1/shop/offers/{id}":                "offers.get",
 	"PATCH /api/v1/shop/offers/{id}":              "offers.update",
 	"POST /api/v1/shop/offers/{id}/publish":       "offers.publish",
+	"POST /api/v1/shop/offers/{id}/unpublish":     "offers.unpublish",
+	"GET /api/v1/shop/admin/vendors":              "admin.vendors",
 	"GET /api/v1/shop/cart":                       "cart.get",
 	"POST /api/v1/shop/cart/items":                "cart.add",
 	"DELETE /api/v1/shop/cart/items/{id}":         "cart.remove",
@@ -132,12 +135,14 @@ func (g *gateway) registerShop(mux *http.ServeMux, metrics *observe.HTTPMetrics)
 	for route, operation := range shopRoutes {
 		mux.Handle(route, metrics.Wrap(strings.SplitN(route, " ", 2)[1], g.shop(operation)))
 	}
+	mux.Handle("POST /api/v1/shop/offers/{id}/photo", metrics.Wrap("/api/v1/shop/offers/{id}/photo", http.HandlerFunc(g.uploadPhoto)))
+	mux.Handle("GET /photos/", metrics.Wrap("/photos/", http.StripPrefix("/photos/", http.FileServer(http.Dir(observe.Env("PHOTO_DIR", "./photos"))))))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data, _ := webFiles.ReadFile("web/index.html")
 		w.Write(data)
 	})
-	for _, name := range []string{"app.js", "style.css"} {
+	for _, name := range []string{"app.js", "admin.js", "catalog.js", "style.css"} {
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasSuffix(name, ".js") {
 				w.Header().Set("Content-Type", "text/javascript; charset=utf-8")

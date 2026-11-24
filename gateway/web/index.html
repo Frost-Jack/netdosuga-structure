@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>НетДосуга · городская афиша</title>
     <link rel="stylesheet" href="/style.css" />
+    <script defer src="/catalog.js"></script>
+    <script defer src="/admin.js"></script>
     <script defer src="/app.js"></script>
   </head>
   <body>
@@ -18,7 +20,8 @@
       ><button data-view="orders">Мои билеты</button
       ><button data-view="applications">Заявки</button
       ><button data-view="offers">Мои события</button
-      ><button data-view="sales">Продажи</button>
+      ><button data-view="sales">Продажи</button
+      ><button data-view="admin">Админка</button>
     </nav>
     <main>
       <p class="notice">
@@ -87,6 +90,12 @@
         ><label>Название<input name="title" required /></label
         ><label>Город<input name="city" required /></label
         ><label>Категория<input name="category" required /></label
+        ><label>ИНН<input name="inn" required inputmode="numeric" /></label
+        ><label>ОГРН<input name="ogrn" required inputmode="numeric" /></label
+        ><label>Юридический адрес<input name="address" required /></label
+        ><label>Контактное лицо<input name="contact_person" required /></label
+        ><label>БИК<input name="bik" required inputmode="numeric" /></label
+        ><label>Расчётный счёт<input name="account" required inputmode="numeric" /></label
         ><button class="primary">Отправить на проверку</button>
       </form>
       <div id="content" aria-live="polite"></div>
