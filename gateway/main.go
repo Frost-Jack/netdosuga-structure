@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"io"
 	"log/slog"
@@ -27,9 +26,11 @@ import (
 )
 
 type gateway struct {
-	client  api.OrderServiceClient
-	timeout time.Duration
-	logger  *slog.Logger
+	client     api.OrderServiceClient
+	demoClient api.OrderServiceClient
+	httpClient *http.Client
+	timeout    time.Duration
+	logger     *slog.Logger
 }
 
 func (g *gateway) create(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,11 @@ func (g *gateway) create(w http.ResponseWriter, r *http.Request) {
 	}
 	callCtx, cancel := context.WithTimeout(ctx, g.timeout)
 	defer cancel()
-	result, err := g.client.CreateDemoOrder(callCtx, &api.CreateDemoOrderRequest{Scenario: input.Scenario})
+	demoClient := g.demoClient
+	if demoClient == nil {
+		demoClient = g.client
+	}
+	result, err := demoClient.CreateDemoOrder(callCtx, &api.CreateDemoOrderRequest{Scenario: input.Scenario})
 	if err != nil {
 		code := status.Code(err)
 		switch code {
@@ -102,24 +107,41 @@ func run() error {
 		return err
 	}
 	defer func() { c, stop := context.WithTimeout(context.Background(), 5*time.Second); defer stop(); shutdown(c) }()
-	conn, err := grpc.NewClient(observe.Env("ORDER_GRPC_ADDR", "order-service:50051"), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	conn, err := grpc.NewClient(observe.Env("ORDER_GRPC_ADDR", "commerce-service:50051"), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	handler := &gateway{api.NewOrderServiceClient(conn), timeout, logger}
+	demoConn, err := grpc.NewClient(observe.Env("DEMO_ORDER_GRPC_ADDR", "order-service:50051"), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	if err != nil {
+		return err
+	}
+	defer demoConn.Close()
+	handler := &gateway{
+		client:     api.NewOrderServiceClient(conn),
+		demoClient: api.NewOrderServiceClient(demoConn),
+		httpClient: &http.Client{Timeout: timeout},
+		timeout:    timeout,
+		logger:     logger,
+	}
 	mux := http.NewServeMux()
 	metrics := observe.NewHTTPMetrics("api-gateway")
 	mux.Handle("POST /api/v1/demo/orders", metrics.Wrap("/api/v1/demo/orders", http.HandlerFunc(handler.create)))
 	handler.registerShop(mux, metrics)
 	registerSwagger(mux)
+	commerceBaseURL := observe.Env("COMMERCE_BASE_URL", "http://commerce-service:8087")
 	observe.Endpoints(mux, metrics, func(c context.Context) error {
-		out, e := grpc_health_v1.NewHealthClient(conn).Check(c, &grpc_health_v1.HealthCheckRequest{})
-		if e != nil {
-			return e
+		req, err := http.NewRequestWithContext(c, http.MethodGet, commerceBaseURL+"/readyz", nil)
+		if err != nil {
+			return err
 		}
-		if out.Status != grpc_health_v1.HealthCheckResponse_SERVING {
-			return fmt.Errorf("order service not ready")
+		resp, err := handler.httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("commerce service not ready: %s", resp.Status)
 		}
 		return nil
 	})

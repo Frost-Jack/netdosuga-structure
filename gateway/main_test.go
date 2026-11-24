@@ -72,7 +72,14 @@ func TestHTTPToGRPC(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	g := &gateway{api.NewOrderServiceClient(conn), 80 * time.Millisecond, slog.New(slog.NewTextHandler(io.Discard, nil))}
+	client := api.NewOrderServiceClient(conn)
+	g := &gateway{
+		client:     client,
+		demoClient: client,
+		httpClient: &http.Client{Timeout: 80 * time.Millisecond},
+		timeout:    80 * time.Millisecond,
+		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
 	httpServer := httptest.NewServer(http.HandlerFunc(g.create))
 	defer httpServer.Close()
 	for _, test := range []struct {
