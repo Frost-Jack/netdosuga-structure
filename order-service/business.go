@@ -424,6 +424,9 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 			}
 		}
 		if op == "orders.pay" {
+			if state != "PAID" && state != "RESERVED" {
+				return nil, problem{409, "INVALID_STATE"}
+			}
 			pending, e := records(ctx, tx, "SELECT order_id FROM business_refund_attempts WHERE order_id=$1", r.Id)
 			if e != nil {
 				return nil, e
@@ -433,9 +436,6 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 			}
 		}
 		if op == "orders.pay" && state != "PAID" {
-			if state != "RESERVED" {
-				return nil, problem{409, "INVALID_STATE"}
-			}
 			paymentID, payErr := b.payment(ctx, "payments", r.Id, o["total_cents"].(int64), text(m, "scenario"))
 			if payErr != nil {
 				e = payErr
@@ -543,19 +543,19 @@ func (b *business) command(ctx context.Context, r *api.ShopRequest, role string)
 		if e != nil {
 			return nil, e
 		}
-		pending, e := records(ctx, tx, "SELECT order_id FROM business_refund_attempts WHERE order_id=$1", t["order_id"])
-		if e != nil {
-			return nil, e
-		}
-		if len(pending) > 0 {
-			return nil, problem{409, "REFUND_PENDING"}
-		}
 		t, e = one(ctx, tx, "SELECT * FROM business_tickets WHERE code=$1 FOR UPDATE", r.Id)
 		if e != nil {
 			return nil, e
 		}
 		if t["status"] != "VALID" || o["status"] != "PAID" {
 			return nil, problem{409, "INVALID_TICKET_STATE"}
+		}
+		pending, e := records(ctx, tx, "SELECT order_id FROM business_refund_attempts WHERE order_id=$1", t["order_id"])
+		if e != nil {
+			return nil, e
+		}
+		if len(pending) > 0 {
+			return nil, problem{409, "REFUND_PENDING"}
 		}
 		t, e = one(ctx, tx, "UPDATE business_tickets SET status='REDEEMED' WHERE code=$1 RETURNING *", r.Id)
 		if e != nil {

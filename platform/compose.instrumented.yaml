@@ -1,0 +1,55 @@
+x-build: &instrumented
+  dockerfile_inline: |
+    FROM golang:1.25.3-alpine3.22 AS build
+    WORKDIR /src
+    COPY go.mod go.sum ./
+    RUN go mod download
+    COPY . .
+    RUN CGO_ENABLED=0 go build -cover -covermode=atomic -coverpkg=./... -trimpath -o /app .
+    FROM alpine:3.22.2
+    COPY --from=build /app /app
+    ENTRYPOINT ["/app"]
+x-coverage: &coverage
+  volumes:
+    - ${ACCEPTANCE_GO_DIR:?set by acceptance runner}:/coverage
+services:
+  gateway-a:
+    <<: *coverage
+    image: netdosuga-at/gateway:instrumented
+    build: {context: ../gateway, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/gateway}
+  gateway-b:
+    <<: *coverage
+    image: netdosuga-at/gateway:instrumented
+    build: {context: ../gateway, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/gateway}
+  identity-service:
+    <<: *coverage
+    image: netdosuga-at/identity-service:instrumented
+    build: {context: ../identity-service, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/identity-service}
+  order-a:
+    <<: *coverage
+    image: netdosuga-at/order-service:instrumented
+    build: {context: ../order-service, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/order-service}
+  order-b:
+    <<: *coverage
+    image: netdosuga-at/order-service:instrumented
+    build: {context: ../order-service, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/order-service}
+  payment-mock:
+    <<: *coverage
+    image: netdosuga-at/payment-mock:instrumented
+    build: {context: ../payment-mock, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/payment-mock}
+  notification-service:
+    <<: *coverage
+    image: netdosuga-at/notification-service:instrumented
+    build: {context: ../notification-service, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/notification-service}
+  integration-mock:
+    <<: *coverage
+    image: netdosuga-at/integration-mock:instrumented
+    build: {context: ../integration-mock, <<: *instrumented}
+    environment: {GOCOVERDIR: /coverage/integration-mock}

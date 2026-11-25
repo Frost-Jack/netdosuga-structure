@@ -43,3 +43,25 @@ func TestBusinessMockFixtures(t *testing.T) {
 		t.Fatal("invalid JSON")
 	}
 }
+
+func TestBusinessDeliveryHistoryRetainsMostRecentEffects(t *testing.T) {
+	m := &mockServer{businessDeliveries: make([]delivery, 1000)}
+	m.businessDeliveries[0] = delivery{EventID: "oldest", OrderID: "fixture"}
+	h := m.handler()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/mock/business-emails",
+		strings.NewReader(`{"mock":true,"event_id":"newest","order_id":"new-order"}`)))
+	if w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/mock/business-deliveries", nil))
+	var data struct{ Deliveries []delivery }
+	if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Deliveries) != 1000 || data.Deliveries[0].EventID == "oldest" ||
+		data.Deliveries[999].EventID != "newest" || data.Deliveries[999].OrderID != "new-order" {
+		t.Fatal("unexpected business delivery history")
+	}
+}

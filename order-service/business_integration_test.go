@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TEST_DATABASE_URL enables real SQL concurrency checks in a disposable schema.
@@ -49,7 +50,9 @@ func TestBusinessDatabase(t *testing.T) {
 	var providerMu sync.Mutex
 	providerPaid := map[string]bool{}
 	providerCancelled := map[string]bool{}
+	providerRefunded := map[string]string{}
 	loseResponse := false
+	var authorizeStarted, continueAuthorize chan struct{}
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		providerMu.Lock()
 		defer providerMu.Unlock()
@@ -62,6 +65,9 @@ func TestBusinessDatabase(t *testing.T) {
 			refund := ""
 			if providerPaid[id] {
 				refund = "reconciled-refund"
+				if providerRefunded[id] == "" {
+					providerRefunded[id] = refund
+				}
 			}
 			json.NewEncoder(w).Encode(map[string]any{"mock": true, "status": "SUCCEEDED", "order_id": id, "amount_cents": m["amount_cents"], "cancelled": true, "refund_id": refund})
 			return
@@ -72,18 +78,31 @@ func TestBusinessDatabase(t *testing.T) {
 			return
 		}
 
+		isRefund := r.URL.Path == "/v1/refunds"
 		if m["scenario"] == "error" {
 			w.WriteHeader(503)
 			json.NewEncoder(w).Encode(map[string]string{"code": "MOCK_PROVIDER_ERROR"})
 			return
 		}
-		providerPaid[id] = true
+		if isRefund {
+			if providerRefunded[id] == "" {
+				providerRefunded[id] = "mock-refund"
+			}
+		} else {
+			if authorizeStarted != nil {
+				close(authorizeStarted)
+				<-continueAuthorize
+				authorizeStarted = nil
+			}
+			providerPaid[id] = true
+		}
 		if loseResponse {
 			loseResponse = false
-			fmt.Fprint(w, "lost response")
+			w.Header().Set("Content-Length", "50")
+			fmt.Fprint(w, `{"mock":`)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"mock": true, "status": "SUCCEEDED", "payment_id": "mock-payment", "refund_id": "mock-refund", "order_id": m["order_id"], "amount_cents": m["amount_cents"]})
+		json.NewEncoder(w).Encode(map[string]any{"mock": true, "status": "SUCCEEDED", "payment_id": "mock-payment", "refund_id": providerRefunded[id], "order_id": m["order_id"], "amount_cents": m["amount_cents"]})
 	}))
 	defer mock.Close()
 	b := &business{db: p, base: mock.URL, client: mock.Client()}
@@ -148,6 +167,8 @@ func TestBusinessDatabase(t *testing.T) {
 	if winner == other {
 		other = "customer-demo"
 	}
+	// A failed checkout preserves its cart. Clear the losing fixture before using either buyer again.
+	must(other, "cart.remove", "offer-demo-1", "", `{}`)
 	if _, e = call(other, "orders.get", id, "", `{}`); e == nil {
 		t.Fatal("cross customer read")
 	}
@@ -257,6 +278,12 @@ func TestBusinessDatabase(t *testing.T) {
 	if e = p.QueryRow(ctx, "SELECT status,refund_id FROM business_orders WHERE id=$1", uncertainID).Scan(&state, &refund); e != nil || state != "EXPIRED" || refund != "reconciled-refund" {
 		t.Fatal("lost response not reconciled", state, refund, e)
 	}
+	if !providerPaid[uncertainID] || providerRefunded[uncertainID] != refund {
+		t.Fatal("expired order was not refunded against the original authorization")
+	}
+	if e = p.QueryRow(ctx, "SELECT count(*) FROM business_tickets WHERE order_id=$1 AND status='VALID'", uncertainID).Scan(&count); e != nil || count != 0 {
+		t.Fatal("expired authorization issued tickets", count, e)
+	}
 	// An explicit DB rollback after successful authorize is likewise compensated on cancel.
 	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
 	rollbackOrder := must("customer-demo", "orders.create", "", "rollback-key", `{}`)["order"].(map[string]any)
@@ -297,7 +324,13 @@ func TestBusinessDatabase(t *testing.T) {
 	if _, e = call("vendor-demo", "tickets.redeem", refundCode, "", `{}`); e == nil {
 		t.Fatal("uncertain refund intent erased by later decline")
 	}
-	must("customer-demo", "orders.cancel", refundOrderID, "", `{}`)
+	reconciled := must("customer-demo", "orders.cancel", refundOrderID, "", `{}`)["order"].(map[string]any)
+	if reconciled["status"] != "CANCELLED" || reconciled["refund_id"] != providerRefunded[refundOrderID] {
+		t.Fatal("provider refund was not reused after the lost response")
+	}
+	if ticket := reconciled["tickets"].([]map[string]any)[0]; ticket["status"] != "REVOKED" {
+		t.Fatal("reconciled refund left a live ticket")
+	}
 	// A database rollback after successful refund also preserves the redemption fence.
 	must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
 	refundRollback := must("customer-demo", "orders.create", "", "refund-rollback-key", `{}`)["order"].(map[string]any)
@@ -330,4 +363,71 @@ func TestBusinessDatabase(t *testing.T) {
 	}
 	must("customer-demo", "orders.cancel", interphaseID, "", `{}`)
 
+	t.Run("N14a payment owns the order row when expiry runs", func(t *testing.T) {
+		must("customer-demo", "cart.add", "", "", `{"offer_id":"offer-demo-2","quantity":1}`)
+		racing := must("customer-demo", "orders.create", "", "pay-vs-expiry", `{}`)["order"].(map[string]any)
+		id := racing["id"].(string)
+		if _, err := p.Exec(ctx, "UPDATE business_orders SET expires_at=now()+interval '2 seconds' WHERE id=$1", id); err != nil {
+			t.Fatal(err)
+		}
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		unblock := func() { releaseOnce.Do(func() { close(release) }) }
+		defer unblock()
+		providerMu.Lock()
+		authorizeStarted, continueAuthorize = started, release
+		providerMu.Unlock()
+		paid := make(chan error, 1)
+		go func() {
+			_, err := call("customer-demo", "orders.pay", id, "", `{}`)
+			paid <- err
+		}()
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("payment missed the provider before expiration")
+		}
+		waitCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		defer cancel()
+		// Read the persisted deadline using PostgreSQL's clock while pay holds the row lock.
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			var expired bool
+			if err := p.QueryRow(waitCtx, "SELECT expires_at <= now() FROM business_orders WHERE id=$1", id).Scan(&expired); err != nil {
+				t.Fatal(err)
+			}
+			if expired {
+				break
+			}
+			select {
+			case <-ticker.C:
+			case <-waitCtx.Done():
+				t.Fatal("reservation deadline did not elapse")
+			}
+		}
+		if err := b.expire(waitCtx); err != nil {
+			t.Fatal(err)
+		}
+		unblock()
+		select {
+		case err := <-paid:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-waitCtx.Done():
+			t.Fatal("payment did not complete")
+		}
+		after := must("customer-demo", "orders.get", id, "", `{}`)["order"].(map[string]any)
+		if tickets := after["tickets"].([]map[string]any); after["status"] != "PAID" || len(tickets) != 1 || tickets[0]["status"] != "VALID" {
+			t.Fatal("winning payment did not preserve the reserve and create a valid ticket")
+		}
+		if err := p.QueryRow(ctx, "SELECT available FROM business_offers WHERE id='offer-demo-2'").Scan(&available); err != nil || available != 49 {
+			t.Fatal("expiry released paid inventory", available, err)
+		}
+		if !providerPaid[id] || providerRefunded[id] != "" {
+			t.Fatal("winning payment should have one authorization without a refund")
+		}
+	})
 }

@@ -1,7 +1,16 @@
-param([ValidateSet('sync','failover','rejoin')][string]$Action = 'sync')
+param(
+  [ValidateSet('sync','failover','rejoin')][string]$Action = 'sync',
+  [string[]]$ComposeFile = @((Join-Path $PSScriptRoot '../compose.ha.yaml')),
+  [string]$ProjectName,
+  [string]$EnvFile,
+  [string]$RoutePath = (Join-Path $PSScriptRoot '../ha/postgres.cfg')
+)
 $ErrorActionPreference = 'Stop'
-$compose = Join-Path $PSScriptRoot '../compose.ha.yaml'
-function Dc { & docker compose -f $compose @args; if ($LASTEXITCODE -ne 0) { throw "Docker compose failed: $args" } }
+$compose = @()
+if ($ProjectName) { $compose += @('-p', $ProjectName) }
+if ($EnvFile) { $compose += @('--env-file', $EnvFile) }
+foreach ($file in $ComposeFile) { $compose += @('-f', $file) }
+function Dc { & docker compose @compose @args; if ($LASTEXITCODE -ne 0) { throw "Docker compose failed: $args" } }
 function Sql([string]$node,[string]$sql) { $result = Dc exec -T $node psql -U demo -d demo -At -v ON_ERROR_STOP=1 -c $sql; return ($result -join "`n").Trim() }
 function WaitSql([string]$node,[string]$query,[string]$expected) {
   $end=(Get-Date).AddSeconds(90)
@@ -20,7 +29,7 @@ function AssertRoute([string]$node) {
   throw 'Database router does not reach a writable primary'
 }
 # Route is a deliberately explicit operator decision, persisted across restarts.
-$route=Join-Path $PSScriptRoot '../ha/postgres.cfg'
+$route=$RoutePath
 $config=Get-Content $route -Raw
 $primary=if ($config -match 'pg-a:5432') {'pg-a'} else {'pg-b'}
 $standby=if ($primary -eq 'pg-a') {'pg-b'} else {'pg-a'}
@@ -45,7 +54,7 @@ if ($Action -eq 'failover') {
   Dc run --rm --no-deps -e "RECLONE_FROM=$primary" -e RECLONE_ONLY=true $standby
   Dc up -d --no-build --no-deps --wait $standby
   Dc restart postgres-router
-  & $PSCommandPath sync
+  & $PSCommandPath sync -ComposeFile $ComposeFile -ProjectName $ProjectName -EnvFile $EnvFile -RoutePath $RoutePath
   AssertRoute $primary
   if ($LASTEXITCODE -ne 0) { throw "Sync restoration failed" }
 } else {

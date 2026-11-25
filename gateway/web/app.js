@@ -19,6 +19,7 @@ function node(tag, text, cls) {
 function button(text, fn) {
   const b = node("button", text);
   b.type = "button";
+  b.disabled = busy;
   b.onclick = () => run(fn);
   return b;
 }
@@ -200,6 +201,39 @@ function orderDetails(parent, order) {
   if (!(order.tickets || []).length)
     parent.append(node("p", "Билеты появятся после успешной оплаты.", "muted"));
 }
+function showOrderDetails(parent, order) {
+  let box = parent.querySelector(".order-details");
+  if (!box) {
+    box = node("div", undefined, "order-details");
+    parent.append(box);
+  }
+  orderDetails(box, order);
+}
+function paymentScenario() {
+  const scenario = node("select");
+  scenario.setAttribute("aria-label", "Сценарий оплаты");
+  for (const [value, label] of [
+    ["success", "Успех"],
+    ["error", "Ошибка"],
+    ["delay", "Задержка"],
+    ["timeout", "Таймаут"],
+  ]) {
+    const option = node("option", label);
+    option.value = value;
+    scenario.append(option);
+  }
+  return scenario;
+}
+async function payOrder(id, scenario) {
+  let paid;
+  try {
+    paid = await api("orders/" + idpath(id) + "/pay", "POST", { scenario });
+  } catch (error) {
+    await load();
+    throw error;
+  }
+  await load(paid.order);
+}
 function permittedViews() {
   return !user
     ? ["catalog"]
@@ -209,7 +243,7 @@ function permittedViews() {
         ? ["catalog", "applications", "offers", "sales"]
         : ["catalog", "applications", "offers", "orders", "sales"];
 }
-async function load() {
+async function load(openOrder) {
   const permitted = permittedViews();
   if (!permitted.includes(view)) view = permitted[0];
   document
@@ -296,17 +330,26 @@ async function load() {
     $("content").append(
       node("p", "Итого: " + money(cart.total_cents), "price"),
     );
-    if ((cart.items || []).length)
-      $("content").append(
-        button("Забронировать на 15 минут", async () => {
+    if ((cart.items || []).length) {
+      const scenario = paymentScenario();
+      const actions = node("div", undefined, "actions");
+      actions.append(
+        scenario,
+        button("Оплатить тестово", async () => {
           const actor = user.id;
+          const selectedScenario = scenario.value;
           checkoutKeys[actor] ??= crypto.randomUUID();
-          await api("orders", "POST", {}, checkoutKeys[actor]);
+          const { order } = await api("orders", "POST", {}, checkoutKeys[actor]);
           delete checkoutKeys[actor];
           view = "orders";
-          await load();
+          await payOrder(order.id, selectedScenario);
         }),
       );
+      $("content").append(
+        node("p", "Тестовая оплата: деньги не списываются, данные карты не нужны.", "muted"),
+        actions,
+      );
+    }
   }
   if (view === "orders") {
     for (const order of data.orders || []) {
@@ -342,14 +385,11 @@ async function load() {
       r.actions.append(
         button("Подробнее", async () => {
           const d = await api("orders/" + idpath(order.id));
-          let box = r.info.querySelector(".order-details");
-          if (!box) {
-            box = node("div", undefined, "order-details");
-            r.info.append(box);
-          }
-          orderDetails(box, d.order);
+          showOrderDetails(r.info, d.order);
         }),
       );
+      if (order.id === openOrder?.id)
+        showOrderDetails(r.info, openOrder);
       if (user?.role === "customer" && order.status === "RESERVED") {
         r.info.append(
           node(
@@ -358,25 +398,10 @@ async function load() {
             "muted",
           ),
         );
-        const scenario = node("select");
-        scenario.setAttribute("aria-label", "Сценарий оплаты");
-        for (const [value, label] of [
-          ["success", "Успех"],
-          ["error", "Ошибка"],
-          ["delay", "Задержка"],
-          ["timeout", "Таймаут"],
-        ]) {
-          const opt = node("option", label);
-          opt.value = value;
-          scenario.append(opt);
-        }
+        const scenario = paymentScenario();
         r.actions.append(
           scenario,
-          button("Оплатить тестово", () =>
-            mutate("orders/" + idpath(order.id) + "/pay", "POST", {
-              scenario: scenario.value,
-            }),
-          ),
+          button("Оплатить тестово", () => payOrder(order.id, scenario.value)),
         );
       }
       if (user?.role === "customer" && !["CANCELLED", "REFUNDED", "EXPIRED"].includes(order.status))

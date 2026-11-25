@@ -91,6 +91,8 @@ func TestShopErrors(t *testing.T) {
 		{name: "domain conflict", body: `{}`, result: &api.ShopResponse{Status: 409, BodyJson: `{"code":"INVALID_STATE","message":"invalid state"}`}, want: 409},
 		{name: "bad status", body: `{}`, result: &api.ShopResponse{Status: 999, BodyJson: `{}`}, want: 502},
 		{name: "bad response", body: `{}`, result: &api.ShopResponse{Status: 200, BodyJson: `null`}, want: 502},
+		{name: "bad catalog JSON", body: `{}`, result: &api.ShopResponse{Status: 200, BodyJson: `{"offers":`}, want: 502},
+		{name: "catalog array", body: `{}`, result: &api.ShopResponse{Status: 200, BodyJson: `[]`}, want: 502},
 		{name: "deadline", body: `{}`, err: status.Error(codes.DeadlineExceeded, "timeout"), want: 504},
 		{name: "offline", body: `{}`, err: status.Error(codes.Unavailable, "offline"), want: 502},
 		{name: "non object", body: `[]`, want: 400},
@@ -104,7 +106,7 @@ func TestShopErrors(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("POST", "/", strings.NewReader(test.body))
 			req.Header.Set("Content-Type", "application/json")
-			g.shop("orders.create")(w, req)
+			g.shop("catalog.list")(w, req)
 			if w.Code != test.want {
 				t.Fatalf("got %d: %s", w.Code, w.Body.String())
 			}
@@ -112,7 +114,41 @@ func TestShopErrors(t *testing.T) {
 			if json.Unmarshal(w.Body.Bytes(), &body) != nil || body["demo"] != true || body["trace_id"] == nil {
 				t.Fatalf("invalid error envelope: %s", w.Body.String())
 			}
+			if test.want == 502 && body["code"] != "DEPENDENCY_ERROR" ||
+				test.want == 504 && body["code"] != "DEADLINE_EXCEEDED" {
+				t.Fatalf("incorrect dependency error: %s", w.Body.String())
+			}
+			if test.want == 400 && client.request != nil {
+				t.Fatal("invalid JSON reached the gRPC dependency")
+			}
 		})
+	}
+}
+
+type shopDeadlineClient struct {
+	api.OrderServiceClient
+}
+
+func (shopDeadlineClient) Shop(ctx context.Context, _ *api.ShopRequest, _ ...grpc.CallOption) (*api.ShopResponse, error) {
+	<-ctx.Done()
+	return nil, status.FromContextError(ctx.Err()).Err()
+}
+
+func TestN21ShopTransportDeadline(t *testing.T) {
+	g := &gateway{client: shopDeadlineClient{}, timeout: time.Second}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/v1/shop/catalog", nil)
+	started := time.Now()
+	g.shop("catalog.list")(w, r)
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < 5*time.Second || elapsed >= 9*time.Second {
+		t.Fatalf("gateway deadline elapsed in %s", elapsed)
+	}
+	if w.Code != http.StatusGatewayTimeout || body["code"] != "DEADLINE_EXCEEDED" || body["offers"] != nil {
+		t.Fatalf("gateway returned %d; expected the deadline error", w.Code)
 	}
 }
 

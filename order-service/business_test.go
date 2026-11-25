@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -54,6 +55,24 @@ func TestBusinessMalformedBody(t *testing.T) {
 	m, e := parseBody(`{"quantity":1.5}`)
 	if e != nil || number(m, "quantity") != -1 {
 		t.Fatal("fraction accepted")
+	}
+}
+
+func TestCommandsValidateBeforeOpeningTransactions(t *testing.T) {
+	b := &business{}
+	for _, tc := range []struct {
+		request api.ShopRequest
+		want    problem
+	}{
+		{api.ShopRequest{Operation: "orders.pay", Id: strings.Repeat("9", 129)}, problem{400, "INVALID_ID"}},
+		{api.ShopRequest{Operation: "orders.pay", BodyJson: `{"scenario":"unsupported"}`}, problem{400, "INVALID_SCENARIO"}},
+		{api.ShopRequest{Operation: "orders.pay", BodyJson: `[]`}, problem{400, "INVALID_JSON"}},
+		{api.ShopRequest{Operation: "orders.pay"}, problem{403, "FORBIDDEN"}},
+		{api.ShopRequest{Operation: "orders.cancel"}, problem{403, "FORBIDDEN"}},
+	} {
+		if _, err := b.command(context.Background(), &tc.request, "vendor"); err != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.request.Operation, err, tc.want)
+		}
 	}
 }
 func TestPublicCatalogPassesIdentity(t *testing.T) {

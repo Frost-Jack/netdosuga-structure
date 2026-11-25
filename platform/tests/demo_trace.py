@@ -104,7 +104,8 @@ class Demo:
             require(trace["traceID"] == trace_id, "Jaeger returned another trace")
         return traces
 
-    def detailed_evidence(self, traces, authentication=False):
+    @staticmethod
+    def detailed_evidence(traces, authentication=False):
         rows = {}
         for trace in traces:
             for span in trace["spans"]:
