@@ -22,6 +22,40 @@ func TestActorSpoofingRequiresSession(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveFailsClosedOnIdentityErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		want   problem
+	}{
+		{"revoked session", 401, "", problem{401, "UNAUTHENTICATED"}},
+		{"upstream unavailable", 503, "", problem{503, "IDENTITY_UNAVAILABLE"}},
+		{"malformed response", 200, `{"user":`, problem{401, "UNAUTHENTICATED"}},
+		{"expired session", 200, `{"user":{"id":"buyer","role":"customer"},"expires_at":"2000-01-01T00:00:00Z"}`, problem{401, "UNAUTHENTICATED"}},
+		{"unknown role", 200, `{"user":{"id":"buyer","role":"unknown"},"expires_at":"2100-01-01T00:00:00Z"}`, problem{403, "FORBIDDEN"}},
+		{"invalid URL", 0, "", problem{503, "IDENTITY_UNAVAILABLE"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			base := server.URL
+			if tc.status == 0 {
+				base = "://invalid"
+			}
+			s := &orderServer{identityURL: base}
+			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer fixture"))
+			id, role, err := s.resolveActor(ctx, &api.ShopRequest{})
+			if id != "" || role != "" || err != tc.want {
+				t.Fatalf("unexpected identity result: id=%q role=%q err=%v", id, role, err)
+			}
+		})
+	}
+}
 func TestResolveUsesIdentityRoleAndActor(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer opaque" {

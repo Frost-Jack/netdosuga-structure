@@ -29,7 +29,8 @@ func TestDeliveryAndTrace(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer s.Close()
-	n := &notifier{client: s.Client(), base: s.URL, events: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_events"}, []string{"outcome"})}
+	client := &http.Client{Transport: HTTPTransport{Base: s.Client().Transport}}
+	n := &notifier{client: client, base: s.URL, events: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_events"}, []string{"outcome"})}
 	msg := kafka.Message{Value: []byte(`{"schema_version":1,"mock":true,"event_id":"event-test","event_type":"demo.order.created","order_id":"demo-order-001","scenario":"success"}`), Headers: []kafka.Header{{Key: "traceparent", Value: []byte("00-11111111111111111111111111111111-2222222222222222-01")}}}
 	if err := n.deliver(context.Background(), msg); err != nil {
 		t.Fatal(err)

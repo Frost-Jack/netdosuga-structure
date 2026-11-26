@@ -242,7 +242,13 @@ func run() error {
 	}, publish: func(c context.Context, value []byte, headers []kafka.Header) error {
 		return writer.WriteMessages(c, kafka.Message{Value: value, Headers: headers})
 	}}
-	businessWriter := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: observe.Env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1"), RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: true, WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1}
+	// The outbox sends one event at a time and waits for its acknowledgement.
+	// A larger batch makes every event wait for the writer's batch timeout.
+	businessWriter := &kafka.Writer{
+		Addr: kafka.TCP(brokers...), Topic: observe.Env("BUSINESS_KAFKA_TOPIC", "netdosuga.business.events.v1"),
+		RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: true, BatchSize: 1,
+		WriteTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, MaxAttempts: 1,
+	}
 	defer businessWriter.Close()
 	service.business = &business{db: pool, client: client, legacyBase: mockURL, base: strings.TrimRight(observe.Env("PAYMENT_BASE_URL", "http://payment-mock:8085"), "/"), writer: businessWriter}
 	go service.business.outbox(ctx)

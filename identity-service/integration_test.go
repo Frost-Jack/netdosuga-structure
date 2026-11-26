@@ -11,6 +11,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestIdentityDatabase(t *testing.T) {
@@ -75,6 +78,13 @@ func TestIdentityDatabase(t *testing.T) {
 		if token == "" {
 			t.Fatal("missing token")
 		}
+		var hash, storedRole string
+		if err := db.QueryRow(ctx, "SELECT role,password_hash FROM users WHERE email=$1", role+"@example.local").Scan(&storedRole, &hash); err != nil {
+			t.Fatal(err)
+		}
+		if storedRole != role || bcrypt.CompareHashAndPassword([]byte(hash), []byte("demo12345")) != nil {
+			t.Fatal("stored role or password hash does not match registration")
+		}
 	}
 	if w := call("/v1/login", `{"email":"vendor@example.local","password":"incorrect"}`, ""); w.Code != 401 {
 		t.Fatal(w.Code)
@@ -106,4 +116,32 @@ func TestIdentityDatabase(t *testing.T) {
 	if w := call("/v1/session", "", out.Token); w.Code != 401 {
 		t.Fatal("expired session accepted")
 	}
+	t.Run("N04 normalized login key and window", func(t *testing.T) {
+		for n := range 20 {
+			body := `{"email":" CUSTOMER@EXAMPLE.LOCAL ","password":"wrong-password"}`
+			if n%2 == 0 {
+				body = `{"email":"customer@example.local","password":"wrong-password"}`
+			}
+			if w := call("/v1/login", body, ""); w.Code != 401 {
+				t.Fatalf("attempt %d returned %d", n+1, w.Code)
+			}
+		}
+		if w := call("/v1/login", `{"email":"customer@example.local","password":"wrong-password"}`, ""); w.Code != 429 {
+			t.Fatalf("attempt 21 returned %d", w.Code)
+		}
+		s.attempts["login:customer@example.local"] = limitEntry{count: 21, until: time.Now().Add(-time.Second)}
+		if w := call("/v1/login", `{"email":"customer@example.local","password":"wrong-password"}`, ""); w.Code != 401 {
+			t.Fatalf("expired window returned %d", w.Code)
+		}
+	})
+	t.Run("N04 successful login resets the counter", func(t *testing.T) {
+		key := "login:vendor@example.local"
+		s.attempts[key] = limitEntry{count: 19, until: time.Now().Add(time.Minute)}
+		if w := call("/v1/login", `{"email":"vendor@example.local","password":"demo12345"}`, ""); w.Code != 200 {
+			t.Fatalf("valid attempt at limit returned %d", w.Code)
+		}
+		if _, exists := s.attempts[key]; exists {
+			t.Fatal("successful login did not clear failed attempts")
+		}
+	})
 }

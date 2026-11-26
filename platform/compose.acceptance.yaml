@@ -1,0 +1,25 @@
+# Used after compose.bootstrap.yaml by tests/acceptance_run.py.
+services:
+  kafka-ui:
+    profiles: [manual]
+  http-router:
+    ports: ['127.0.0.1::8080']
+  jaeger:
+    ports: ['127.0.0.1::16686']
+  prometheus:
+    ports: ['127.0.0.1::9090']
+  grafana:
+    ports: ['127.0.0.1::3000']
+  integration-mock:
+    ports: ['127.0.0.1::8083']
+  payment-mock:
+    ports: ['127.0.0.1::8085']
+  postgres-router:
+    volumes:
+      - ${ACCEPTANCE_HA_DIR:?set by acceptance runner}:/usr/local/etc/haproxy:ro
+  pg-a:
+    volumes:
+      - ${ACCEPTANCE_HA_DIR:?set by acceptance runner}:/ha:ro
+  pg-b:
+    volumes:
+      - ${ACCEPTANCE_HA_DIR:?set by acceptance runner}:/ha:ro

@@ -21,3 +21,17 @@ func TestSafeNestedSecretsAndBounds(t *testing.T) {
 		t.Fatal("payload not bounded")
 	}
 }
+
+func TestO03OversizedDiagnosticUsesOmissionStatus(t *testing.T) {
+	id := strings.Repeat("a", 128)
+	item := map[string]any{"order_id": id, "offer_id": id}
+	items := []any{item, item, item}
+	payload := map[string]any{"orders": []any{items, items, items}}
+	data, err := json.Marshal(Safe(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"status":"payload_omitted"}` {
+		t.Fatal("missing omission status")
+	}
+}

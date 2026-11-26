@@ -154,6 +154,7 @@ p {
   gap: 24px;
 }
 .row {
+  overflow-wrap: anywhere;
   border-top: 2px solid #252525;
   padding: 24px 0;
   display: flex;

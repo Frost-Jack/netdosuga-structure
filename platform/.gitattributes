@@ -1,1 +1,2 @@
 ha/*.sh text eol=lf
+startup/*.sh text eol=lf

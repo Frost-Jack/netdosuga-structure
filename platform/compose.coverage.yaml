@@ -1,0 +1,35 @@
+services:
+  coverage-db:
+    image: ${COVERAGE_POSTGRES_IMAGE:-postgres:16.10-alpine3.22}
+    environment:
+      POSTGRES_USER: coverage
+      POSTGRES_PASSWORD: coverage
+      POSTGRES_DB: service_tests
+    healthcheck:
+      test: [CMD, pg_isready, -U, coverage, -d, service_tests]
+      interval: 1s
+      timeout: 2s
+      retries: 20
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ['127.0.0.1::5432']
+  go-tests:
+    image: golang:1.25.3-alpine3.22
+    working_dir: /workspace
+    volumes:
+      - ../:/workspace:ro
+      - ${COVERAGE_RESULTS:?set by coverage runner}:/results
+    environment:
+      TEST_DATABASE_URL: postgres://coverage:coverage@coverage-db:5432/service_tests?sslmode=disable
+      READINESS_TEST_DATABASE_URL: postgres://coverage:coverage@coverage-db:5432/readiness_tests?sslmode=disable
+      PAYMENT_TEST_DATABASE_URL: postgres://coverage:coverage@coverage-db:5432/payment_tests?sslmode=disable
+    depends_on:
+      coverage-db: {condition: service_healthy}
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        status=0
+        for module in gateway identity-service order-service payment-mock notification-service integration-mock; do
+          echo "Go tests: $$module"
+          (cd "$$module" && go test -count=1 -timeout=3m -json -covermode=atomic -coverpkg=./... -coverprofile="/results/$$module.cover" ./...) >"/results/$$module.jsonl" 2>&1 || status=1
+        done
+        exit "$$status"

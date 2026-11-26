@@ -16,7 +16,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -352,12 +354,17 @@ func outcome(status int) string {
 	return "success"
 }
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	tp, e := configure(ctx, "payment-mock")
 	if e != nil {
 		panic(e)
 	}
-	defer tp.Shutdown(ctx)
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		tp.Shutdown(shutdown)
+	}()
 	p, e := database(ctx, os.Getenv("DATABASE_URL"))
 	if e != nil {
 		panic(e)
@@ -382,7 +389,16 @@ func main() {
 	mux.HandleFunc("/v1/refunds", t.wrap("/v1/refunds", s.handle("refund")))
 	httpServer := &http.Server{Addr: ":8085", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	slog.Info("payment mock listening", "port", 8085, "mock", true)
-	if e = httpServer.ListenAndServe(); e != nil {
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(shutdown)
+	}()
+	if e = httpServer.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
 		panic(e)
 	}
+	<-drained
 }
